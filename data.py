@@ -36,25 +36,35 @@ class FeaturesDataset(FairseqDataset):
         with open(image_ids_file, 'r') as f:
             self.image_ids = f.read().splitlines()
 
+        # FIXME: remove temporary experiment
+        self.rand_size = np.random.randint(32, 65, size=len(self.image_ids))
+
     def __getitem__(self, index):
         features_file = os.path.join(self.features_dir, f'{self.image_ids[index]}.npy')
         features = np.load(features_file)
-
+        features = features[:self.num_tokens(index)]
         return torch.as_tensor(features)
 
     def __len__(self):
         return len(self.image_ids)
 
     def num_tokens(self, index):
-        # TODO: support variable number of features
-        return 64
+        return self.rand_size[index]
 
     def size(self, index):
-        # TODO: support variable number of features
-        return 64
+        return self.num_tokens(index)
 
     def collater(self, samples):
-        return default_collate(samples)
+        num_tokens = [sample.shape[0] for sample in samples]
+        max_tokens = max(num_tokens)
+
+        samples_padded = []
+
+        for s, n in zip(samples, num_tokens):
+            sample_padded = np.pad(s, pad_width=((0, max_tokens-n), (0, 0)), mode='constant')
+            samples_padded.append(sample_padded)
+
+        return default_collate(samples_padded)
 
 
 class ImageCaptionDataset(FairseqDataset):
@@ -95,24 +105,23 @@ class ImageCaptionDataset(FairseqDataset):
         ids = [sample['id'] for sample in samples]
         ids = torch.tensor(ids, dtype=torch.long)
 
+        num_sentences = len(samples)
+
         # FIXME: workaround for edge case in parallel processing
         # (framework passes empty samples list
         # to collater under certain conditions)
-        if len(samples) == 0:
+        if num_sentences == 0:
             return None
 
         sources = [sample['source'] for sample in samples]
         targets = [sample['target'] for sample in samples]
 
-        num_sentences = len(samples)
-        num_tokens = sum([self.cap_ds.sizes[id] for id in ids])
-
+        img_lengths = torch.tensor([self.img_ds.size(id) for id in ids])
         img_items = self.img_ds.collater(sources)
-        img_lengths = torch.full((num_sentences,), fill_value=64, dtype=torch.int64)
 
+        txt_lengths = sum([self.cap_ds.sizes[id] for id in ids])
         txt_items = data_utils.collate_tokens(targets, pad_idx=self.cap_dict.pad(), eos_idx=self.cap_dict.eos(), move_eos_to_beginning=False)
         prv_items = data_utils.collate_tokens(targets, pad_idx=self.cap_dict.pad(), eos_idx=self.cap_dict.eos(), move_eos_to_beginning=True)
-
 
         return {
             'id': ids,
@@ -122,6 +131,6 @@ class ImageCaptionDataset(FairseqDataset):
                 'prev_output_tokens': prv_items,
             },
             'target': txt_items,
-            'ntokens': num_tokens,
+            'ntokens': txt_lengths,
             'nsentences': num_sentences,
         }
