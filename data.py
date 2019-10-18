@@ -36,8 +36,7 @@ class FeaturesDataset(FairseqDataset):
         with open(image_ids_file, 'r') as f:
             self.image_ids = f.read().splitlines()
 
-        # FIXME: remove temporary experiment
-        self.rand_size = np.random.randint(32, 65, size=len(self.image_ids))
+        self.sizes = np.ones(len(self.image_ids), dtype=np.int) * 64
 
     def __getitem__(self, index):
         features_file = os.path.join(self.features_dir, f'{self.image_ids[index]}.npy')
@@ -49,10 +48,10 @@ class FeaturesDataset(FairseqDataset):
         return len(self.image_ids)
 
     def num_tokens(self, index):
-        return self.rand_size[index]
+        return self.size(index)
 
     def size(self, index):
-        return self.num_tokens(index)
+        return self.sizes[index]
 
     def collater(self, samples):
         num_tokens = [sample.shape[0] for sample in samples]
@@ -99,7 +98,9 @@ class ImageCaptionDataset(FairseqDataset):
         else:
             indices = np.arange(len(self))
 
-        return indices[np.argsort(self.cap_ds.sizes[indices], kind='mergesort')]
+        # Inspired by LanguagePairDataset.ordered_indices
+        indices = indices[np.argsort(self.cap_ds.sizes[indices], kind='mergesort')]
+        return indices[np.argsort(self.img_ds.sizes[indices], kind='mergesort')]
 
     def collater(self, samples):
         ids = [sample['id'] for sample in samples]
