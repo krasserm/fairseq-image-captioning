@@ -19,10 +19,10 @@ class CaptioningTask(FairseqTask):
                             help='image captions directory')
         parser.add_argument('--captions-lang', default='en', choices=['en'],
                             help='caption language')
-        parser.add_argument('--max-source-positions', default=64, type=int,
-                            help='maximum number of image features')
-        parser.add_argument('--max-positions', default=1024, type=int,
-                            help='maximum number of caption tokens')
+        parser.add_argument('--max-source-positions', default=64, type=int, metavar='N',
+                            help='max number of image features')
+        parser.add_argument('--max-target-positions', default=1024, type=int, metavar='N',
+                            help='max number of tokens in the target sequence')
 
     @classmethod
     def setup_task(cls, args, **kwargs):
@@ -46,7 +46,7 @@ class CaptioningTask(FairseqTask):
         self.datasets[split] = data.ImageCaptionDataset(features_ds, captions_ds, self.captions_dict, shuffle=True)
 
     def max_positions(self):
-        return self.args.max_positions, self.args.max_positions
+        return self.args.max_source_positions, self.args.max_target_positions
 
     @property
     def source_dictionary(self):

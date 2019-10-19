@@ -87,10 +87,11 @@ class ImageCaptionDataset(FairseqDataset):
         return len(self.cap_ds)
 
     def num_tokens(self, index):
-        return self.size(index)
+        return self.size(index)[1]
 
     def size(self, index):
-        return self.cap_ds.sizes[index]
+        # number of image feature vectors, number of tokens in caption
+        return self.img_ds.sizes[index], self.cap_ds.sizes[index]
 
     def ordered_indices(self):
         if self.shuffle:
