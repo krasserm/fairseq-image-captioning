@@ -42,7 +42,7 @@ def main(args):
         features = np.load(features_file)
 
         features_tensor = torch.as_tensor(features).unsqueeze(0)
-        features_lengths = torch.tensor((1, features.shape[0]), dtype=torch.int64)
+        features_lengths = torch.tensor([features.shape[0]], dtype=torch.int64)
 
         if use_cuda:
             features_tensor = features_tensor.cuda()

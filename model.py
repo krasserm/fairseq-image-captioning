@@ -12,6 +12,17 @@ from fairseq.models import register_model, register_model_architecture, transfor
 from modules import Projection
 
 
+def create_padding_mask(src_tokens, src_lengths):
+    padding_mask = torch.zeros(src_tokens.shape[:2],
+                               dtype=torch.bool,
+                               device=src_tokens.device)
+
+    for i, src_length in enumerate(src_lengths):
+        padding_mask[i, src_length:] = 1
+
+    return padding_mask
+
+
 class SimplisticEncoder(FairseqEncoder):
     """Simplistic encoder that projects image features to encoder embedding space.
     """
@@ -21,18 +32,59 @@ class SimplisticEncoder(FairseqEncoder):
         self.linear = nn.Linear(2048, args.encoder_embed_dim)
 
     def forward(self, src_tokens, src_lengths=None, **kwargs):
-        src_encoded = self.linear(src_tokens)
-        src_encoded = src_encoded.transpose(0, 1)
+        enc_out = self.linear(src_tokens)
+        enc_out = enc_out.transpose(0, 1)
+
+        enc_padding_mask = create_padding_mask(src_tokens, src_lengths)
+
         return {
-            'encoder_out': src_encoded,
-            'encoder_padding_mask': None
+            'encoder_out': enc_out,
+            'encoder_padding_mask': enc_padding_mask
         }
 
     def reorder_encoder_out(self, encoder_out, new_order):
-        out = encoder_out['encoder_out']
+        enc_out = encoder_out['encoder_out']
+        enc_padding_mask = encoder_out['encoder_padding_mask']
+
         return {
-            'encoder_out': out.index_select(1, new_order),
-            'encoder_padding_mask': None
+            'encoder_out': enc_out.index_select(1, new_order),
+            'encoder_padding_mask': enc_padding_mask.index_select(0, new_order)
+        }
+
+
+class CaptioningEncoder(transformer.TransformerEncoder):
+    def __init__(self, args, embed_tokens):
+        super().__init__(args, None, embed_tokens)
+
+        # TODO: support spatial positional embedding
+        self.embed_positions = None
+
+    def forward(self, src_tokens, src_lengths):
+        """Same behavior as super().forward except encoder_padding_mask computation.
+        """
+
+        # embed tokens and positions
+        x = self.embed_scale * self.embed_tokens(src_tokens)
+        if self.embed_positions is not None:
+            x += self.embed_positions(src_tokens)
+        x = F.dropout(x, p=self.dropout, training=self.training)
+
+        # B x T x C -> T x B x C
+        x = x.transpose(0, 1)
+
+        # compute padding mask
+        encoder_padding_mask = create_padding_mask(src_tokens, src_lengths)
+
+        # encoder layers
+        for layer in self.layers:
+            x = layer(x, encoder_padding_mask)
+
+        if self.layer_norm:
+            x = self.layer_norm(x)
+
+        return {
+            'encoder_out': x,  # T x B x C
+            'encoder_padding_mask': encoder_padding_mask,  # B x T
         }
 
 
@@ -41,6 +93,8 @@ class CaptioningTransformer(BaseFairseqModel):
     @staticmethod
     def add_args(parser):
         transformer.TransformerModel.add_args(parser)
+        parser.add_argument('--encoder-feature-dim', type=int, metavar='N',
+                            help='encoder visual feature dimension')
         parser.add_argument('--simplistic-encoder', default=False, action='store_true',
                             help='use simplistic encoder')
 
@@ -63,10 +117,7 @@ class CaptioningTransformer(BaseFairseqModel):
         if args.simplistic_encoder:
             return SimplisticEncoder(args)
         else:
-            encoder_embedding = Projection(args)
-            encoder = transformer.TransformerEncoder(args, None, encoder_embedding)
-            encoder.embed_positions = None # do not use positional encodings (hack)
-            return encoder
+            return CaptioningEncoder(args, Projection(args))
 
     @staticmethod
     def build_decoder(args, captions_dict):
@@ -93,6 +144,7 @@ class CaptioningTransformer(BaseFairseqModel):
 @register_model_architecture('captioning-transformer', 'captioning-transformer')
 def captioning_transformer_arch(args):
     args.encoder_layers = getattr(args, 'encoder_layers', 2)
+    args.encoder_feature_dim = getattr(args, 'encoder_feature_dim', 2048)
 
 
 class Inception3Base(models.inception.Inception3):
