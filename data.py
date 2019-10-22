@@ -1,7 +1,7 @@
 import os
-import glob
 import torch
 import numpy as np
+import pandas as pd
 
 from fairseq.data import FairseqDataset, data_utils
 from torch.utils.data.dataloader import default_collate
@@ -9,24 +9,32 @@ from torch.utils.data.dataloader import default_collate
 from PIL import Image
 
 
+def split_file(split):
+    return os.path.join('splits', f'karpathy_{split}_images.txt')
+
+
+def read_split_image_ids_and_paths(split):
+    split_df = pd.read_csv(split_file(split), sep=' ', header=None)
+    return split_df.iloc[:,1].to_numpy(), split_df.iloc[:,0].to_numpy()
+
+
+def read_split_image_ids(split):
+    return read_split_image_ids_and_paths(split)[0]
+
+
 class ImageDataset(torch.utils.data.Dataset):
-    def __init__(self, images_dir, transform=lambda x: x):
-        self.image_paths = glob.glob(os.path.join(images_dir, '*.jpg'))
+    def __init__(self, image_ids, image_paths, transform=lambda x: x):
+        self.image_ids = image_ids
+        self.image_paths = image_paths
         self.transform = transform
 
     def __len__(self):
-        return len(self.image_paths)
+        return len(self.image_ids)
 
     def __getitem__(self, idx):
         image_path = self.image_paths[idx]
         with Image.open(image_path).convert('RGB') as img:
-            return self.transform(img), self.image_id(image_path)
-
-    @staticmethod
-    def image_id(image_path):
-        image_file = os.path.split(image_path)[1]
-        image_name = os.path.splitext(image_file)[0]
-        return int(image_name)
+            return self.transform(img), self.image_ids[idx]
 
 
 class FeaturesDataset(FairseqDataset):

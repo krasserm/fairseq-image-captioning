@@ -15,11 +15,11 @@ Create an `ms-coco` directory in the project's root directory with
 
     mkdir ms-coco
 
-Download the MS-COCO 2017
+Download the MS-COCO 2014
 
-- [training images](http://images.cocodataset.org/zips/train2017.zip)
-- [validation images](http://images.cocodataset.org/zips/val2017.zip)
-- [annotations](http://images.cocodataset.org/annotations/annotations_trainval2017.zip)
+- [training images](http://images.cocodataset.org/zips/train2014.zip)
+- [validation images](http://images.cocodataset.org/zips/val2014.zip)
+- [annotations](http://images.cocodataset.org/annotations/annotations_trainval2014.zip)
 
 to the created `ms-coco` directory and extract the archives there. The resulting directory structure should look like
 
@@ -27,13 +27,15 @@ to the created `ms-coco` directory and extract the archives there. The resulting
 ms-coco
   annotations
   images
-    train2017
-    val2017
+    train2014
+    val2014
 ```
 
 ## Pre-processing
 
-The following command converts MS-COCO images and captions to formats required for model training.
+The following command converts MS-COCO images and captions to formats required for model training. Pre-processing uses
+[Karpathy splits](splits) to split MS-COCO training and validation data into a training (`train`), validation (`valid`)
+and (`test`) split. Karpathy split files were copied from [this location](https://github.com/peteanderson80/bottom-up-attention/tree/master/data/genome/coco_splits).
 
 ```
 export PYTHONPATH=.
@@ -47,11 +49,13 @@ created `output` directory. Alternatively, you can also run the individual pre-p
 ```
 export PYTHONPATH=.
 
-./preprocess_captions.sh --ms-coco-dir ms-coco --split train
-./preprocess_captions.sh --ms-coco-dir ms-coco --split valid
-
 ./preprocess_images.sh --ms-coco-dir ms-coco --split train --num-workers 2
 ./preprocess_images.sh --ms-coco-dir ms-coco --split valid --num-workers 2
+./preprocess_images.sh --ms-coco-dir ms-coco --split test --num-workers 2
+
+./preprocess_captions.sh --ms-coco-dir ms-coco --split train
+./preprocess_captions.sh --ms-coco-dir ms-coco --split valid
+./preprocess_captions.sh --ms-coco-dir ms-coco --split test
 ```
 
 ## Training

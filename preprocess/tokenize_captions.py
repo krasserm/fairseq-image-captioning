@@ -1,4 +1,5 @@
 import argparse
+import data
 import json
 import os
 import tqdm
@@ -6,30 +7,33 @@ import tqdm
 from sacremoses import MosesTokenizer
 
 
-def load_annotations(coco_dir, coco_split):
-    """Loads MS-COCO captions JSON and returns value of 'annotations' key.
+def load_annotations(coco_dir):
+    with open(os.path.join(coco_dir, 'annotations', f'captions_train2014.json')) as f:
+        annotations = json.load(f)['annotations']
 
-       Args:
-           coco_dir (str): MS-COCO data directory
-           coco_split (str): 'train2017' or 'val2017'
+    with open(os.path.join(coco_dir, 'annotations', f'captions_val2014.json')) as f:
+        annotations.extend(json.load(f)['annotations'])
+
+    return annotations
+
+
+def select_captions(annotations, image_ids):
+    """Select captions of given image_ids and return them with their image IDs.
     """
 
-    with open(os.path.join(coco_dir, 'annotations', f'captions_{coco_split}.json')) as f:
-        return json.load(f)['annotations']
+    # for fast lookup
+    image_ids = set(image_ids)
 
-
-def get_captions_and_image_ids(annotations):
-    """Extracts captions and image IDs from annotations and return them as lists.
-    """
-
-    image_captions = []
-    image_ids = []
+    captions = []
+    caption_image_ids = []
 
     for annotation in annotations:
-        image_captions.append(annotation['caption'].replace('\n', ''))
-        image_ids.append(annotation['image_id'])
+        image_id = annotation['image_id']
+        if image_id in image_ids:
+            captions.append(annotation['caption'].replace('\n', ''))
+            caption_image_ids.append(image_id)
 
-    return image_captions, image_ids
+    return captions, caption_image_ids
 
 
 def tokenize_captions(captions, lang='en'):
@@ -55,28 +59,26 @@ def write_image_ids(image_ids, filename):
 def main(args):
     os.makedirs(args.output_dir, exist_ok=True)
 
-    splits = {
-        'train': args.ms_coco_train_split,
-        'valid': args.ms_coco_valid_split
-    }
+    # Load annotations of MS-COCO training and validation set
+    annotations = load_annotations(args.ms_coco_dir)
 
-    # Load annotations from MS-COCO dataset
-    annotations = load_annotations(args.ms_coco_dir, splits[args.split])
+    # Read image ids of given split
+    image_ids = data.read_split_image_ids(args.split)
 
-    # Extract captions and image IDs from annotations
-    captions, ids = get_captions_and_image_ids(annotations)
+    # Select captions and their image IDs from annotations
+    captions, caption_image_ids = select_captions(annotations, image_ids)
 
     print('Tokenize captions ...')
     captions = tokenize_captions(tqdm.tqdm(captions))
 
     captions_filename = os.path.join(args.output_dir, f'{args.split}-captions.tok.en')
-    ids_filename = os.path.join(args.output_dir, f'{args.split}-ids.txt')
+    caption_image_ids_filename = os.path.join(args.output_dir, f'{args.split}-ids.txt')
 
     write_captions(captions, captions_filename)
     print(f'Wrote tokenized captions to {captions_filename}.')
 
-    write_image_ids(ids, ids_filename)
-    print(f'Wrote image IDs to {ids_filename}.')
+    write_image_ids(caption_image_ids, caption_image_ids_filename)
+    print(f'Wrote caption image IDs to {caption_image_ids_filename}.')
 
 
 if __name__ == '__main__':
@@ -84,12 +86,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--ms-coco-dir',
                         help='MS-COCO data directory.')
-    parser.add_argument('--ms-coco-train-split', default='train2017',
-                        help='MS-COCO training data split name.')
-    parser.add_argument('--ms-coco-valid-split', default='val2017',
-                        help='MS-COCO validation data split name.')
-    parser.add_argument('--split', choices=['train', 'valid'],
-                        help="Data split ('train' or 'valid').")
+    parser.add_argument('--split', choices=['train', 'valid', 'test'],
+                        help="Data split ('train', 'valid' or 'test').")
     parser.add_argument('--output-dir', default='output',
                         help='Output directory.')
 
