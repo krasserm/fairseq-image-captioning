@@ -6,17 +6,13 @@ import numpy as np
 
 from torchvision import transforms
 
-from data import ImageDataset
+from data import ImageDataset, read_split_image_ids_and_paths
 from model import inception_v3_base
 
 
 def main(args):
-    splits = {
-        'train': args.ms_coco_train_split,
-        'valid': args.ms_coco_valid_split
-    }
-
-    images_dir = os.path.join(args.ms_coco_dir, 'images', splits[args.split])
+    image_ids, image_paths = read_split_image_ids_and_paths(args.split)
+    image_paths = [os.path.join(args.ms_coco_dir, 'images', image_path) for image_path in image_paths]
     features_dir = os.path.join(args.output_dir, f'{args.split}-features')
 
     os.makedirs(features_dir, exist_ok=True)
@@ -31,7 +27,7 @@ def main(args):
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    dataset = ImageDataset(images_dir, transform=transform)
+    dataset = ImageDataset(image_ids, image_paths, transform=transform)
     loader = torch.utils.data.DataLoader(dataset,
                                          batch_size=args.batch_size,
                                          num_workers=args.num_workers,
@@ -52,12 +48,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--ms-coco-dir',
                         help='MS-COCO data directory.')
-    parser.add_argument('--ms-coco-train-split', default='train2017',
-                        help='MS-COCO training data split name.')
-    parser.add_argument('--ms-coco-valid-split', default='val2017',
-                        help='MS-COCO validation data split name.')
-    parser.add_argument('--split', choices=['train', 'valid'],
-                        help="Data split ('train' or 'valid').")
+    parser.add_argument('--split', choices=['train', 'valid', 'test'],
+                        help="Data split ('train', 'valid' or 'test').")
     parser.add_argument('--output-dir', default='output',
                         help='Output directory.')
     parser.add_argument('--device', default='cuda', type=torch.device,
