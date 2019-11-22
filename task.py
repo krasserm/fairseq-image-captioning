@@ -13,6 +13,8 @@ import model
 class CaptioningTask(FairseqTask):
     @staticmethod
     def add_args(parser):
+        parser.add_argument('--features', default='grid', choices=['grid', 'obj'],
+                            help='image features')
         parser.add_argument('--features-dir', default='output',
                             help='image features directory')
         parser.add_argument('--captions-dir', default='output',
@@ -20,7 +22,7 @@ class CaptioningTask(FairseqTask):
         parser.add_argument('--captions-lang', default='en', choices=['en'],
                             help='caption language')
         parser.add_argument('--max-source-positions', default=64, type=int, metavar='N',
-                            help='max number of image features')
+                            help='max number of objects in the source image')
         parser.add_argument('--max-target-positions', default=1024, type=int, metavar='N',
                             help='max number of tokens in the target sequence')
 
@@ -36,14 +38,21 @@ class CaptioningTask(FairseqTask):
         self.captions_dict = captions_dict
 
     def load_dataset(self, split, **kwargs):
-        features_dir = os.path.join(self.args.features_dir, f'{split}-features')
+        features_dir = os.path.join(self.args.features_dir, f'{split}-features-{self.args.features}')
         captions_file = os.path.join(self.args.captions_dir, f'{split}-captions.{self.args.captions_lang}')
-        image_ids_file = os.path.join(self.args.captions_dir, f'{split}-ids.txt')
-
-        features_ds = data.FeaturesDataset(features_dir, image_ids_file)
         captions_ds = data_utils.load_indexed_dataset(captions_file, self.captions_dict)
 
-        self.datasets[split] = data.ImageCaptionDataset(features_ds, captions_ds, self.captions_dict, shuffle=True)
+        image_ids_file = os.path.join(self.args.captions_dir, f'{split}-ids.txt')
+        image_ids = data.read_image_ids(image_ids_file)
+
+        if self.args.features == 'grid':
+            image_ds = data.GridFeaturesDataset(features_dir, image_ids, grid_shape=(8, 8))
+        else:  # self.args.features == 'obj':
+            image_metadata_file = os.path.join(features_dir, 'metadata.csv')
+            image_metadata = data.read_image_metadata(image_metadata_file)
+            image_ds = data.ObjectFeaturesDataset(features_dir, image_ids, image_metadata)
+
+        self.datasets[split] = data.ImageCaptionDataset(image_ds, captions_ds, self.captions_dict, shuffle=True)
 
     def max_positions(self):
         return self.args.max_source_positions, self.args.max_target_positions

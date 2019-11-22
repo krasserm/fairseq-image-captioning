@@ -13,7 +13,7 @@ from model import inception_v3_base
 def main(args):
     image_ids, image_paths = read_split_image_ids_and_paths(args.split)
     image_paths = [os.path.join(args.ms_coco_dir, 'images', image_path) for image_path in image_paths]
-    features_dir = os.path.join(args.output_dir, f'{args.split}-features')
+    features_dir = os.path.join(args.output_dir, f'{args.split}-features-grid')
 
     os.makedirs(features_dir, exist_ok=True)
 

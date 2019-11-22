@@ -1,7 +1,9 @@
 import os
-import torch
 import numpy as np
 import pandas as pd
+
+import torch
+import torch.nn.functional as F
 
 from fairseq.data import FairseqDataset, data_utils
 from torch.utils.data.dataloader import default_collate
@@ -22,6 +24,24 @@ def read_split_image_ids(split):
     return read_split_image_ids_and_paths(split)[0]
 
 
+def read_image_ids(file):
+    return [int(line) for line in open(file, 'r')]
+
+
+def read_image_metadata(file):
+    df = pd.read_csv(file)
+    md = {}
+
+    for img_id, img_h, img_w, num_boxes in zip(df['image_id'], df['image_h'], df['image_w'], df['num_boxes']):
+        md[img_id] = {
+            'image_h': np.float32(img_h),
+            'image_w': np.float32(img_w),
+            'num_boxes': num_boxes
+        }
+
+    return md
+
+
 class ImageDataset(torch.utils.data.Dataset):
     def __init__(self, image_ids, image_paths, transform=lambda x: x):
         self.image_ids = image_ids
@@ -38,40 +58,107 @@ class ImageDataset(torch.utils.data.Dataset):
 
 
 class FeaturesDataset(FairseqDataset):
-    def __init__(self, features_dir, image_ids_file):
+    def __init__(self, features_dir, image_ids, num_objects):
         self.features_dir = features_dir
-
-        with open(image_ids_file, 'r') as f:
-            self.image_ids = f.read().splitlines()
-
-        self.sizes = np.ones(len(self.image_ids), dtype=np.int) * 64
+        self.image_ids = image_ids
+        self.num_objects = num_objects
 
     def __getitem__(self, index):
-        features_file = os.path.join(self.features_dir, f'{self.image_ids[index]}.npy')
-        features = np.load(features_file)
-        features = features[:self.num_tokens(index)]
-        return torch.as_tensor(features)
+        return self.read_data(self.image_ids[index])
 
     def __len__(self):
         return len(self.image_ids)
 
     def num_tokens(self, index):
-        return self.size(index)
+        return self.num_objects[index]
 
     def size(self, index):
-        return self.sizes[index]
+        return self.num_objects[index]
+
+    @property
+    def sizes(self):
+        return self.num_objects
+
+    def read_data(self, image_id):
+        raise NotImplementedError
 
     def collater(self, samples):
-        num_tokens = [sample.shape[0] for sample in samples]
-        max_tokens = max(num_tokens)
+        num_objects = [features.shape[0] for features, _ in samples]
+        max_objects = max(num_objects)
 
-        samples_padded = []
+        feature_samples_padded = []
+        location_samples_padded = []
 
-        for s, n in zip(samples, num_tokens):
-            sample_padded = np.pad(s, pad_width=((0, max_tokens-n), (0, 0)), mode='constant')
-            samples_padded.append(sample_padded)
+        for (features, locations), n in zip(samples, num_objects):
+            features_padded = F.pad(features, pad=[0, 0, 0, max_objects-n], mode='constant', value=0.0)
+            locations_padded = F.pad(locations, pad=[0, 0, 0, max_objects-n], mode='constant', value=0.0)
+            feature_samples_padded.append(features_padded)
+            location_samples_padded.append(locations_padded)
 
-        return default_collate(samples_padded)
+        return default_collate(feature_samples_padded), default_collate(location_samples_padded)
+
+
+class GridFeaturesDataset(FeaturesDataset):
+    def __init__(self, features_dir, image_ids, grid_shape=(8, 8)):
+        super().__init__(features_dir=features_dir,
+                         image_ids=image_ids,
+                         num_objects=np.ones(len(image_ids), dtype=np.int) * np.prod(grid_shape))
+
+        self.grid_shape = grid_shape
+        self.locations = self.tile_locations(grid_shape)
+
+    def read_data(self, image_id):
+        features_file = os.path.join(self.features_dir, f'{image_id}.npy')
+        features = np.load(features_file)
+        return torch.as_tensor(features), self.locations
+
+    @staticmethod
+    def tile_locations(grid_shape):
+        num_tiles = np.prod(grid_shape)
+        rel_tile_w = 1. / grid_shape[1]
+        rel_tile_h = 1. / grid_shape[0]
+        rel_tile_area = 1. / num_tiles
+
+        rel_tile_locations = np.zeros(shape=(grid_shape[0], grid_shape[1], 5), dtype=np.float32)
+
+        for i in range(grid_shape[0]):
+            for j in range(grid_shape[1]):
+                rel_tile_locations[i, j] = np.array([
+                    j * rel_tile_w,
+                    i * rel_tile_h,
+                    (j+1) * rel_tile_w,
+                    (i+1) * rel_tile_h,
+                    rel_tile_area
+                ], dtype=np.float32)
+
+        return torch.as_tensor(rel_tile_locations).view(num_tiles, 5)
+
+
+class ObjectFeaturesDataset(FeaturesDataset):
+    def __init__(self, features_dir, image_ids, image_metadata):
+        super().__init__(features_dir=features_dir,
+                         image_ids=image_ids,
+                         num_objects=np.array([image_metadata[image_id]['num_boxes'] for image_id in image_ids]))
+
+        self.image_metadata = image_metadata
+
+    def read_data(self, image_id):
+        features_file = os.path.join(self.features_dir, f'{image_id}.npy')
+        features = np.load(features_file)
+
+        boxes_file = os.path.join(self.features_dir, f'{image_id}-boxes.npy')
+        boxes = np.load(boxes_file)
+
+        # Normalize box coordinates
+        boxes[:, [0, 2]] /= self.image_metadata[image_id]['image_w']
+        boxes[:, [1, 3]] /= self.image_metadata[image_id]['image_h']
+
+        # Normalized box areas
+        areas = (boxes[:, 2] - boxes[:, 0]) * \
+                (boxes[:, 3] - boxes[:, 1])
+
+        return torch.as_tensor(features), \
+               torch.as_tensor(np.c_[boxes, areas])
 
 
 class ImageCaptionDataset(FairseqDataset):
@@ -82,13 +169,14 @@ class ImageCaptionDataset(FairseqDataset):
         self.shuffle = shuffle
 
     def __getitem__(self, index):
-        img_item = self.img_ds[index]
-        cap_item = self.cap_ds[index]
+        source_features, source_locations = self.img_ds[index]
+        target = self.cap_ds[index]
 
         return {
             'id': index,
-            'source': img_item,
-            'target': cap_item
+            'source_features': source_features,
+            'source_locations': source_locations,
+            'target': target
         }
 
     def __len__(self):
@@ -112,8 +200,25 @@ class ImageCaptionDataset(FairseqDataset):
         return indices[np.argsort(self.img_ds.sizes[indices], kind='mergesort')]
 
     def collater(self, samples):
-        ids = [sample['id'] for sample in samples]
-        ids = torch.tensor(ids, dtype=torch.long)
+        indices = []
+
+        source_feature_samples = []
+        source_location_samples = []
+        source_lengths = []
+
+        target_samples = []
+        target_ntokens = 0
+
+        for sample in samples:
+            index = sample['id']
+            indices.append(index)
+
+            source_feature_samples.append(sample['source_features'])
+            source_location_samples.append(sample['source_locations'])
+            source_lengths.append(self.img_ds.sizes[index])
+
+            target_samples.append(sample['target'])
+            target_ntokens += self.cap_ds.sizes[index]
 
         num_sentences = len(samples)
 
@@ -123,24 +228,23 @@ class ImageCaptionDataset(FairseqDataset):
         if num_sentences == 0:
             return None
 
-        sources = [sample['source'] for sample in samples]
-        targets = [sample['target'] for sample in samples]
+        indices = torch.tensor(indices, dtype=torch.long)
 
-        img_lengths = torch.tensor([self.img_ds.size(id) for id in ids])
-        img_items = self.img_ds.collater(sources)
+        source_feature_batch, source_location_batch = \
+            self.img_ds.collater(list(zip(source_feature_samples, source_location_samples)))
 
-        txt_lengths = sum([self.cap_ds.sizes[id] for id in ids])
-        txt_items = data_utils.collate_tokens(targets, pad_idx=self.cap_dict.pad(), eos_idx=self.cap_dict.eos(), move_eos_to_beginning=False)
-        prv_items = data_utils.collate_tokens(targets, pad_idx=self.cap_dict.pad(), eos_idx=self.cap_dict.eos(), move_eos_to_beginning=True)
+        target_batch = data_utils.collate_tokens(target_samples, pad_idx=self.cap_dict.pad(), eos_idx=self.cap_dict.eos(), move_eos_to_beginning=False)
+        rotate_batch = data_utils.collate_tokens(target_samples, pad_idx=self.cap_dict.pad(), eos_idx=self.cap_dict.eos(), move_eos_to_beginning=True)
 
         return {
-            'id': ids,
+            'id': indices,
             'net_input': {
-                'src_tokens': img_items,
-                'src_lengths': img_lengths,
-                'prev_output_tokens': prv_items,
+                'src_tokens': source_feature_batch,
+                'src_locations': source_location_batch,
+                'src_lengths': source_lengths,
+                'prev_output_tokens': rotate_batch,
             },
-            'target': txt_items,
-            'ntokens': txt_lengths,
+            'target': target_batch,
+            'ntokens': target_ntokens,
             'nsentences': num_sentences,
         }
