@@ -31,19 +31,19 @@ def main(args):
     os.makedirs(out_features_dir, exist_ok=True)
 
     with open(out_metadata_file, 'w') as fo:
-        writer = csv.DictWriter(fo, fieldnames = FIELDNAMES_OUT, extrasaction='ignore')
+        writer = csv.DictWriter(fo, fieldnames=FIELDNAMES_OUT, extrasaction='ignore')
         writer.writeheader()
 
         for in_features_file in in_features_files:
             with open(in_features_file, 'r') as fi:
-                reader = csv.DictReader(fi, delimiter='\t', fieldnames = FIELDNAMES_IN)
+                reader = csv.DictReader(fi, delimiter='\t', fieldnames=FIELDNAMES_IN)
                 for item in tqdm.tqdm(reader):
                     item['image_id'] = int(item['image_id'])
                     item['image_h'] = int(item['image_h'])
                     item['image_w'] = int(item['image_w'])
                     item['num_boxes'] = int(item['num_boxes'])
                     for field in ['boxes', 'features']:
-                        item[field] = np.frombuffer(base64.decodebytes(item[field].encode()), dtype=np.float32).reshape((item['num_boxes'],-1))
+                        item[field] = np.frombuffer(base64.decodebytes(item[field].encode()), dtype=np.float32).reshape(item['num_boxes'], -1)
 
                     # write features metadata
                     # TODO: include bounding boxes

@@ -47,10 +47,12 @@ class CaptioningTask(FairseqTask):
 
         if self.args.features == 'grid':
             image_ds = data.GridFeaturesDataset(features_dir, image_ids, grid_shape=(8, 8))
-        else:  # self.args.features == 'obj':
+        elif self.args.features == 'obj':
             image_metadata_file = os.path.join(features_dir, 'metadata.csv')
             image_metadata = data.read_image_metadata(image_metadata_file)
             image_ds = data.ObjectFeaturesDataset(features_dir, image_ids, image_metadata)
+        else:
+            raise ValueError(f'Invalid --features option: {self.args.features}')
 
         self.datasets[split] = data.ImageCaptionDataset(image_ds, captions_ds, self.captions_dict, shuffle=True)
 

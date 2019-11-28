@@ -39,11 +39,14 @@ def main(args):
 
     if args.features == 'grid':
         image_ds = data.GridFeaturesDataset('output/valid-features-grid', image_ids)
-    else:  # args.features == 'obj':
+    elif args.features == 'obj':
         image_md = data.read_image_metadata('output/valid-features-obj/metadata.csv')
         image_ds = data.ObjectFeaturesDataset('output/valid-features-obj', image_ids, image_md)
+    else:
+        raise ValueError(f'Invalid --features option: {args.features}')
 
-    sample_ids = [line.rstrip('\n') for line in open(args.input)]
+    with open(args.input) as f:
+        sample_ids = [line.rstrip('\n') for line in f]
 
     for sample_id in sample_ids:
         features, locations = image_ds.read_data(int(sample_id))

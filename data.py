@@ -25,7 +25,8 @@ def read_split_image_ids(split):
 
 
 def read_image_ids(file):
-    return [int(line) for line in open(file, 'r')]
+    with open(file, 'r') as f:
+        return [int(line) for line in f]
 
 
 def read_image_metadata(file):

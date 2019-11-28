@@ -61,7 +61,6 @@ class SimplisticCaptioningEncoder(FairseqEncoder):
 
 class TransformerCaptioningEncoder(transformer.TransformerEncoder):
     def __init__(self, args):
-        # TODO: check validity of modules.FeatureEmbedding(args) usage
         super().__init__(args, None, modules.FeatureEmbedding(args))
         self.location_embedding = modules.SpatialEmbedding(args) \
             if args.feature_spatial_embeddings else None
@@ -180,7 +179,7 @@ def default_captioning_arch(args):
 
 
 @register_model_architecture('simplistic-captioning-model', 'simplistic-captioning-arch')
-def default_captioning_arch(args):
+def simplistic_captioning_arch(args):
     if args.no_projection:
         args.encoder_embed_dim = args.features_dim
 
