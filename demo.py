@@ -1,9 +1,9 @@
-import os
 import torch
-import numpy as np
 
 from fairseq import options, tasks, checkpoint_utils
 from fairseq.data import encoders
+
+import data
 
 
 def main(args):
@@ -35,29 +35,39 @@ def main(args):
             x = tokenizer.decode(x)
         return x
 
-    image_ids = [line.rstrip('\n') for line in open(args.input)]
+    image_ids = data.read_image_ids('output/valid-ids.txt')
 
-    for image_id in image_ids:
-        features_file = os.path.join(args.features_dir, 'valid-features', f'{image_id}.npy')
-        features = np.load(features_file)
+    if args.features == 'grid':
+        image_ds = data.GridFeaturesDataset('output/valid-features-grid', image_ids)
+    elif args.features == 'obj':
+        image_md = data.read_image_metadata('output/valid-features-obj/metadata.csv')
+        image_ds = data.ObjectFeaturesDataset('output/valid-features-obj', image_ids, image_md)
+    else:
+        raise ValueError(f'Invalid --features option: {args.features}')
 
-        features_tensor = torch.as_tensor(features).unsqueeze(0)
-        features_lengths = torch.tensor([features.shape[0]], dtype=torch.int64)
+    with open(args.input) as f:
+        sample_ids = [line.rstrip('\n') for line in f]
+
+    for sample_id in sample_ids:
+        features, locations = image_ds.read_data(int(sample_id))
+        length = features.shape[0]
 
         if use_cuda:
-            features_tensor = features_tensor.cuda()
+            features = features.cuda()
+            locations = locations.cuda()
 
         sample = {
             'net_input': {
-                'src_tokens': features_tensor,
-                'src_lengths': features_lengths
+                'src_tokens': features.unsqueeze(0),
+                'src_locations': locations.unsqueeze(0),
+                'src_lengths': [length]
             }
         }
 
         translations = task.inference_step(generator, models, sample)
         prediction = decode(captions_dict.string(translations[0][0]['tokens']))
 
-        print(f'{image_id}: {prediction}')
+        print(f'{sample_id}: {prediction}')
 
 
 def cli_main():

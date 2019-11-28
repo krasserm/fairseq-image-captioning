@@ -1,5 +1,6 @@
+import modules
+
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
 from torchvision import models
@@ -8,8 +9,6 @@ from torchvision.models.inception import model_urls
 
 from fairseq.models import FairseqEncoder, BaseFairseqModel
 from fairseq.models import register_model, register_model_architecture, transformer
-
-from modules import Projection
 
 
 def create_padding_mask(src_tokens, src_lengths):
@@ -23,18 +22,26 @@ def create_padding_mask(src_tokens, src_lengths):
     return padding_mask
 
 
-class SimplisticEncoder(FairseqEncoder):
-    """Simplistic encoder that projects image features to encoder embedding space.
-    """
-
+class SimplisticCaptioningEncoder(FairseqEncoder):
     def __init__(self, args):
         super().__init__(dictionary=None)
-        self.linear = nn.Linear(2048, args.encoder_embed_dim)
+        self.feature_embedding = modules.FeatureEmbedding(args) \
+            if not args.no_projection else None
+        self.location_embedding = modules.SpatialEmbedding(args) \
+            if args.feature_spatial_embeddings else None
 
-    def forward(self, src_tokens, src_lengths=None, **kwargs):
-        enc_out = self.linear(src_tokens)
-        enc_out = enc_out.transpose(0, 1)
+    def forward(self, src_tokens, src_lengths, src_locations, **kwargs):
+        x = src_tokens
 
+        if self.feature_embedding is not None:
+            x = self.feature_embedding(src_tokens)
+        if self.location_embedding is not None:
+            x += self.location_embedding(src_locations)
+
+        # B x T x C -> T x B x C
+        enc_out = x.transpose(0, 1)
+
+        # compute padding mask
         enc_padding_mask = create_padding_mask(src_tokens, src_lengths)
 
         return {
@@ -52,21 +59,19 @@ class SimplisticEncoder(FairseqEncoder):
         }
 
 
-class CaptioningEncoder(transformer.TransformerEncoder):
-    def __init__(self, args, embed_tokens):
-        super().__init__(args, None, embed_tokens)
+class TransformerCaptioningEncoder(transformer.TransformerEncoder):
+    def __init__(self, args):
+        super().__init__(args, None, modules.FeatureEmbedding(args))
+        self.location_embedding = modules.SpatialEmbedding(args) \
+            if args.feature_spatial_embeddings else None
 
-        # TODO: support spatial positional embedding
-        self.embed_positions = None
-
-    def forward(self, src_tokens, src_lengths):
-        """Same behavior as super().forward except encoder_padding_mask computation.
-        """
-
+    def forward(self, src_tokens, src_lengths, src_locations, **kwargs):
         # embed tokens and positions
         x = self.embed_scale * self.embed_tokens(src_tokens)
-        if self.embed_positions is not None:
-            x += self.embed_positions(src_tokens)
+
+        if self.location_embedding is not None:
+            x += self.location_embedding(src_locations)
+
         x = F.dropout(x, p=self.dropout, training=self.training)
 
         # B x T x C -> T x B x C
@@ -88,15 +93,14 @@ class CaptioningEncoder(transformer.TransformerEncoder):
         }
 
 
-@register_model('captioning-transformer')
-class CaptioningTransformer(BaseFairseqModel):
+class CaptioningModel(BaseFairseqModel):
     @staticmethod
     def add_args(parser):
         transformer.TransformerModel.add_args(parser)
-        parser.add_argument('--encoder-feature-dim', type=int, metavar='N',
-                            help='encoder visual feature dimension')
-        parser.add_argument('--simplistic-encoder', default=False, action='store_true',
-                            help='use simplistic encoder')
+        parser.add_argument('--features-dim', type=int, default=2048,
+                            help='visual features dimension')
+        parser.add_argument('--feature-spatial-embeddings', default=False, action='store_true',
+                            help='use feature spatial embeddings')
 
     @classmethod
     def build_model(cls, args, task):
@@ -107,20 +111,20 @@ class CaptioningTransformer(BaseFairseqModel):
 
         captions_dict = task.target_dictionary
 
-        encoder = cls.build_encoder(args)
-        decoder = cls.build_decoder(args, captions_dict)
-
-        return CaptioningTransformer(encoder, decoder)
+        encoder = cls.do_build_encoder(args)
+        decoder = cls.do_build_decoder(args, captions_dict)
+        return cls.do_build_model(encoder, decoder)
 
     @classmethod
-    def build_encoder(cls, args):
-        if args.simplistic_encoder:
-            return SimplisticEncoder(args)
-        else:
-            return CaptioningEncoder(args, Projection(args))
+    def do_build_model(cls, encoder, decoder):
+        raise NotImplementedError
 
-    @staticmethod
-    def build_decoder(args, captions_dict):
+    @classmethod
+    def do_build_encoder(cls, args):
+        raise NotImplementedError
+
+    @classmethod
+    def do_build_decoder(cls, args, captions_dict):
         decoder_embedding = transformer.Embedding(num_embeddings=len(captions_dict),
                                                   embedding_dim=args.decoder_embed_dim,
                                                   padding_idx=captions_dict.pad())
@@ -141,10 +145,43 @@ class CaptioningTransformer(BaseFairseqModel):
         return self.decoder.max_positions()
 
 
-@register_model_architecture('captioning-transformer', 'captioning-transformer')
-def captioning_transformer_arch(args):
+@register_model('default-captioning-model')
+class DefaultCaptioningModel(CaptioningModel):
+    @classmethod
+    def do_build_encoder(cls, args):
+        return TransformerCaptioningEncoder(args)
+
+    @classmethod
+    def do_build_model(cls, encoder, decoder):
+        return DefaultCaptioningModel(encoder, decoder)
+
+
+@register_model('simplistic-captioning-model')
+class SimplisticCaptioningModel(CaptioningModel):
+    @staticmethod
+    def add_args(parser):
+        CaptioningModel.add_args(parser)
+        parser.add_argument('--no-projection', default=False, action='store_true',
+                            help='do not project visual features')
+
+    @classmethod
+    def do_build_encoder(cls, args):
+        return SimplisticCaptioningEncoder(args)
+
+    @classmethod
+    def do_build_model(cls, encoder, decoder):
+        return SimplisticCaptioningModel(encoder, decoder)
+
+
+@register_model_architecture('default-captioning-model', 'default-captioning-arch')
+def default_captioning_arch(args):
     args.encoder_layers = getattr(args, 'encoder_layers', 2)
-    args.encoder_feature_dim = getattr(args, 'encoder_feature_dim', 2048)
+
+
+@register_model_architecture('simplistic-captioning-model', 'simplistic-captioning-arch')
+def simplistic_captioning_arch(args):
+    if args.no_projection:
+        args.encoder_embed_dim = args.features_dim
 
 
 class Inception3Base(models.inception.Inception3):
