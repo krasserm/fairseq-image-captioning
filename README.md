@@ -145,30 +145,32 @@ See [Extensions](#extensions) for captioning-specific command line options. Chec
 directory and `.checkpoints/checkpoint_best.pt` should be used for testing. **Please note that the hyper-parameters used 
 here are just examples, they are not tuned yet**. 
 
-## Demo
+## Inference
 
-Scripts for detailed model evaluation are not available yet but will come soon, together with an application that reads
-images from a directory to caption them.  At the moment you can use the following simple demo application for captioning 
-images of the validation dataset. 
+Inference can be performed using the `inference.py` script to generate captions for images of a specified dataset.    
+A saved model, a file containing image IDs and the dataset-split these image IDs are taken from have to be supplied.
+An optional output path may be specified to store the predicted captions as a json-file.
+
+The following command shows an example usage of the script:
 
 ```
-python demo.py \
+python inference.py \
        --features grid \
        --features-dir output \
        --captions-dir output \
        --user-dir task \
        --tokenizer moses \
        --bpe subword_nmt \
-        --bpe-codes output/codes.txt \
+       --bpe-codes output/codes.txt \
        --beam 5 \
        --path .checkpoints/checkpoint_best.pt \
-       --input demo/val-images.txt
+       --split valid \
+       --input demo/val-images.txt \
+       --output demo/val-predictions.json
 ```
 
-
-
-Validation image IDs are read from [demo/val-images.txt](demo/val-images.txt). This should produce an output containing 
-something like 
+Image IDs are read from [demo/val-images.txt](demo/val-images.txt) in this sample. 
+This should produce an output containing something like:
 
 ```
 105537: A street sign hanging from the side of a metal pole.
@@ -176,22 +178,91 @@ something like
 ...
 ```
 
-### Pre-trained model
+Furthermore, the predictions are stored in [demo/val-predictions.json](demo/val-predictions.json).
 
-A model obtained with the [training](#training) command above is available for download ([checkpoint_demo.pt](https://drive.google.com/open?id=1GWLenxZivitAcniSUXRcaC8N8b5_7two)).
-Assuming you've downloaded the file to the project's root directory you can run the demo with 
+## Evaluation
+
+### Installation of dependencies
+
+Evaluation is performed using a [Python 3 Fork](https://github.com/flauted/coco-caption) of the
+[COCO Caption Evaluation](https://github.com/tylin/coco-caption) library. This library is included
+as a [Git Submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules) in the path `external/coco-caption`.
+
+Download the submodule using following commands:
 
 ```
-python demo.py \
+git submodule init
+git submodule update
+``` 
+
+Furthermore, the COCO Caption Evaluation library uses the [Stanford CoreNLP 3.6.0](https://stanfordnlp.github.io/CoreNLP/index.html) toolset
+which must be downloaded prior to the first execution of the scoring script. 
+
+It is important to change into the submodules root folder before executing the script to download the required files:
+
+```
+cd external/coco-caption
+./get_stanford_models.sh
+```
+
+### Model evaluation
+
+Evaluation of a model is performed using the `score.sh` script.
+This script uses the specified reference-captions as the ground truth and evaluates the model based on the generated captions provided as a json-file (created prior via the `inference.py` script).    
+    
+The following example calculates the evaluation scores for the generated captions provided in [demo/val-predictions.json](demo/val-predictions.json).
+
+```
+./score.sh \
+        --reference-captions external/coco-caption/annotations/captions_val2014.json \
+        --system-captions demo/val-predictions.json
+```
+
+### Evaluating model performance on the validation set
+
+To evaluate a trained model on the validation-set, the following command sequence should be used:
+
+```
+# Generate captions for all images in the Karpathy validation set
+python inference.py \
        --features grid \
        --features-dir output \
        --captions-dir output \
        --user-dir task \
        --tokenizer moses \
        --bpe subword_nmt \
-        --bpe-codes output/codes.txt \
+       --bpe-codes output/codes.txt \
+       --beam 5 \
+       --path .checkpoints/checkpoint_best.pt \
+       --split valid \
+       --input output/valid-ids.txt \
+       --output output/valid-predictions.json
+
+# Score the generated captions
+./score.sh \
+        --reference-captions external/coco-caption/annotations/captions_val2014.json \
+        --system-captions output/valid-predictions.json
+```
+
+*Note:* The `valid` set used to evaluate the model is taken from the [Karpathy splits](splits) and is a subset of the official MS-COCO `val2014` set.
+
+### Pre-trained model
+
+A model obtained with the [training](#training) command above is available for download ([checkpoint_demo.pt](https://drive.google.com/open?id=1GWLenxZivitAcniSUXRcaC8N8b5_7two)).
+Assuming you've downloaded the file to the project's root directory you can run the demo with 
+
+```
+python inference.py \
+       --features grid \
+       --features-dir output \
+       --captions-dir output \
+       --user-dir task \
+       --tokenizer moses \
+       --bpe subword_nmt \
+       --bpe-codes output/codes.txt \
        --beam 5 \
        --path checkpoint_demo.pt \
+       --split valid \
        --input demo/val-images.txt
 ```
 
@@ -204,5 +275,3 @@ Two sample validation images and their produced captions are:
 ![105537](demo/COCO_val2014_000000105537.jpg)
 
 "A street sign hanging from the side of a metal pole."
-
-
