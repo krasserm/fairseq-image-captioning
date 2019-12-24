@@ -1,18 +1,14 @@
 # Image Captioning Transformer
 
-Purpose of this project is to experiment with several approaches to image captioning using [Transformers](https://arxiv.org/abs/1706.03762)
-and multi-modal pre-trained models like [ViLBERT](https://arxiv.org/abs/1908.02265). It is an extension of the 
-[pytorch/fairseq](https://github.com/pytorch/fairseq) sequence modeling toolkit and inspired by elements of the 
-following papers:
-
-- Piyush Sharma, Nan Ding, Sebastian Goodman, and Radu Soricut. [Conceptual captions: A cleaned, hypernymed, image 
-  alt-text dataset for automatic image captioning](https://www.aclweb.org/anthology/P18-1238/). In ACL, 2018.
+This project implements [Transformer](https://arxiv.org/abs/1706.03762)\-based image captioning models as extension of 
+the [pytorch/fairseq](https://github.com/pytorch/fairseq) sequence modeling toolkit. It is still in an early stage, 
+don't use it for any serious work. The current implementation is based on ideas from the following papers:
 
 - Jun Yu, Jing Li, Zhou Yu, and Qingming Huang. [Multimodal transformer with multi-view visual
   representation for image captioning](https://arxiv.org/abs/1905.07841). arXiv preprint arXiv:1905.07841, 2019.
   
-- Lu, J.; Batra, D.; Parikh, D.; and Lee, S. 2019. [ViLBERT: Pretraining task-agnostic visiolinguistic representations 
-  for vision-and-language tasks](https://arxiv.org/abs/1908.02265). arXiv preprint arXiv:1908.02265. 2019.
+- Piyush Sharma, Nan Ding, Sebastian Goodman, and Radu Soricut. [Conceptual captions: A cleaned, hypernymed, image 
+  alt-text dataset for automatic image captioning](https://www.aclweb.org/anthology/P18-1238/). In ACL, 2018.
 
 - P. Anderson, X. He, C. Buehler, D. Teney, M. Johnson, S. Gould, and L. Zhang. [Bottom-up and top-down
   attention for image captioning and visual question answering](https://arxiv.org/abs/1707.07998). 
@@ -21,11 +17,6 @@ following papers:
 - Kelvin Xu, Jimmy Ba, Ryan Kiros, Kyunghyun Cho, Aaron Courville, Ruslan Salakhudinov, Rich Zemel, and Yoshua
   Bengio. [Show, Attend and Tell: Neural image caption generation with visual attention](https://arxiv.org/abs/1502.03044). 
   In International Conference on Machine Learning. 2015.
-
-- ...
-  
-**This project is still early work in progress**. Basic training and usage of transformer-based image captioning models
-is possible but hyper-parameters have not been tuned yet. ViLBERT integration is still pending.  
    
 ## Setup
 
