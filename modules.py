@@ -7,7 +7,7 @@ class FeatureEmbedding(nn.Module):
 
     def __init__(self, args):
         super().__init__()
-        self.linear = nn.Linear(args.features_dim, args.encoder_embed_dim)
+        self.linear = nn.Linear(args.feature_dim, args.encoder_embed_dim)
 
         # The following members are needed to
         # interface with TransformerEncoder.

@@ -1,13 +1,11 @@
 import os
 import numpy as np
 import pandas as pd
-
 import torch
-import torch.nn.functional as F
 
 from fairseq.data import FairseqDataset, data_utils
 from torch.utils.data.dataloader import default_collate
-
+from torchvision import transforms
 from PIL import Image
 
 
@@ -17,7 +15,15 @@ def split_file(split):
 
 def read_split_image_ids_and_paths(split):
     split_df = pd.read_csv(split_file(split), sep=' ', header=None)
-    return split_df.iloc[:,1].to_numpy(), split_df.iloc[:,0].to_numpy()
+    return split_df.iloc[:, 1].to_numpy(), split_df.iloc[:, 0].to_numpy()
+
+
+def read_split_image_ids_and_paths_dict(split):
+    image_ids_path_dict = {}
+    image_ids, image_paths = read_split_image_ids_and_paths(split)
+    for image_id, image_path in zip(image_ids, image_paths):
+        image_ids_path_dict[image_id] = image_path
+    return image_ids_path_dict
 
 
 def read_split_image_ids(split):
@@ -29,22 +35,16 @@ def read_image_ids(file):
         return [int(line) for line in f]
 
 
-def read_image_metadata(file):
-    df = pd.read_csv(file)
-    md = {}
-
-    for img_id, img_h, img_w, num_boxes in zip(df['image_id'], df['image_h'], df['image_w'], df['num_boxes']):
-        md[img_id] = {
-            'image_h': np.float32(img_h),
-            'image_w': np.float32(img_w),
-            'num_boxes': num_boxes
-        }
-
-    return md
+def default_transform():
+    return transforms.Compose([
+        transforms.Resize((299, 299)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
 
 
 class ImageDataset(torch.utils.data.Dataset):
-    def __init__(self, image_ids, image_paths, transform=lambda x: x):
+    def __init__(self, image_ids, image_paths, transform=default_transform()):
         self.image_ids = image_ids
         self.image_paths = image_paths
         self.transform = transform
@@ -58,110 +58,6 @@ class ImageDataset(torch.utils.data.Dataset):
             return self.transform(img), self.image_ids[idx]
 
 
-class FeaturesDataset(FairseqDataset):
-    def __init__(self, features_dir, image_ids, num_objects):
-        self.features_dir = features_dir
-        self.image_ids = image_ids
-        self.num_objects = num_objects
-
-    def __getitem__(self, index):
-        return self.read_data(self.image_ids[index])
-
-    def __len__(self):
-        return len(self.image_ids)
-
-    def num_tokens(self, index):
-        return self.num_objects[index]
-
-    def size(self, index):
-        return self.num_objects[index]
-
-    @property
-    def sizes(self):
-        return self.num_objects
-
-    def read_data(self, image_id):
-        raise NotImplementedError
-
-    def collater(self, samples):
-        num_objects = [features.shape[0] for features, _ in samples]
-        max_objects = max(num_objects)
-
-        feature_samples_padded = []
-        location_samples_padded = []
-
-        for (features, locations), n in zip(samples, num_objects):
-            features_padded = F.pad(features, pad=[0, 0, 0, max_objects-n], mode='constant', value=0.0)
-            locations_padded = F.pad(locations, pad=[0, 0, 0, max_objects-n], mode='constant', value=0.0)
-            feature_samples_padded.append(features_padded)
-            location_samples_padded.append(locations_padded)
-
-        return default_collate(feature_samples_padded), default_collate(location_samples_padded)
-
-
-class GridFeaturesDataset(FeaturesDataset):
-    def __init__(self, features_dir, image_ids, grid_shape=(8, 8)):
-        super().__init__(features_dir=features_dir,
-                         image_ids=image_ids,
-                         num_objects=np.ones(len(image_ids), dtype=np.int) * np.prod(grid_shape))
-
-        self.grid_shape = grid_shape
-        self.locations = self.tile_locations(grid_shape)
-
-    def read_data(self, image_id):
-        features_file = os.path.join(self.features_dir, f'{image_id}.npy')
-        features = np.load(features_file)
-        return torch.as_tensor(features), self.locations
-
-    @staticmethod
-    def tile_locations(grid_shape):
-        num_tiles = np.prod(grid_shape)
-        rel_tile_w = 1. / grid_shape[1]
-        rel_tile_h = 1. / grid_shape[0]
-        rel_tile_area = 1. / num_tiles
-
-        rel_tile_locations = np.zeros(shape=(grid_shape[0], grid_shape[1], 5), dtype=np.float32)
-
-        for i in range(grid_shape[0]):
-            for j in range(grid_shape[1]):
-                rel_tile_locations[i, j] = np.array([
-                    j * rel_tile_w,
-                    i * rel_tile_h,
-                    (j+1) * rel_tile_w,
-                    (i+1) * rel_tile_h,
-                    rel_tile_area
-                ], dtype=np.float32)
-
-        return torch.as_tensor(rel_tile_locations).view(num_tiles, 5)
-
-
-class ObjectFeaturesDataset(FeaturesDataset):
-    def __init__(self, features_dir, image_ids, image_metadata):
-        super().__init__(features_dir=features_dir,
-                         image_ids=image_ids,
-                         num_objects=np.array([image_metadata[image_id]['num_boxes'] for image_id in image_ids]))
-
-        self.image_metadata = image_metadata
-
-    def read_data(self, image_id):
-        features_file = os.path.join(self.features_dir, f'{image_id}.npy')
-        features = np.load(features_file)
-
-        boxes_file = os.path.join(self.features_dir, f'{image_id}-boxes.npy')
-        boxes = np.load(boxes_file)
-
-        # Normalize box coordinates
-        boxes[:, [0, 2]] /= self.image_metadata[image_id]['image_w']
-        boxes[:, [1, 3]] /= self.image_metadata[image_id]['image_h']
-
-        # Normalized box areas
-        areas = (boxes[:, 2] - boxes[:, 0]) * \
-                (boxes[:, 3] - boxes[:, 1])
-
-        return torch.as_tensor(features), \
-               torch.as_tensor(np.c_[boxes, areas])
-
-
 class ImageCaptionDataset(FairseqDataset):
     def __init__(self, img_ds, cap_ds, cap_dict, shuffle=False):
         self.img_ds = img_ds
@@ -170,13 +66,12 @@ class ImageCaptionDataset(FairseqDataset):
         self.shuffle = shuffle
 
     def __getitem__(self, index):
-        source_features, source_locations = self.img_ds[index]
+        source, _ = self.img_ds[index]
         target = self.cap_ds[index]
 
         return {
             'id': index,
-            'source_features': source_features,
-            'source_locations': source_locations,
+            'source': source,
             'target': target
         }
 
@@ -184,11 +79,10 @@ class ImageCaptionDataset(FairseqDataset):
         return len(self.cap_ds)
 
     def num_tokens(self, index):
-        return self.size(index)[1]
+        return self.size(index)
 
     def size(self, index):
-        # number of image feature vectors, number of tokens in caption
-        return self.img_ds.sizes[index], self.cap_ds.sizes[index]
+        return self.cap_ds.sizes[index]
 
     def ordered_indices(self):
         if self.shuffle:
@@ -197,16 +91,12 @@ class ImageCaptionDataset(FairseqDataset):
             indices = np.arange(len(self))
 
         # Inspired by LanguagePairDataset.ordered_indices
-        indices = indices[np.argsort(self.cap_ds.sizes[indices], kind='mergesort')]
-        return indices[np.argsort(self.img_ds.sizes[indices], kind='mergesort')]
+        return indices[np.argsort(self.cap_ds.sizes[indices], kind='mergesort')]
 
     def collater(self, samples):
         indices = []
 
-        source_feature_samples = []
-        source_location_samples = []
-        source_lengths = []
-
+        source_samples = []
         target_samples = []
         target_ntokens = 0
 
@@ -214,10 +104,7 @@ class ImageCaptionDataset(FairseqDataset):
             index = sample['id']
             indices.append(index)
 
-            source_feature_samples.append(sample['source_features'])
-            source_location_samples.append(sample['source_locations'])
-            source_lengths.append(self.img_ds.sizes[index])
-
+            source_samples.append(sample['source'])
             target_samples.append(sample['target'])
             target_ntokens += self.cap_ds.sizes[index]
 
@@ -230,19 +117,14 @@ class ImageCaptionDataset(FairseqDataset):
             return None
 
         indices = torch.tensor(indices, dtype=torch.long)
-
-        source_feature_batch, source_location_batch = \
-            self.img_ds.collater(list(zip(source_feature_samples, source_location_samples)))
-
+        source_batch = default_collate(source_samples)
         target_batch = data_utils.collate_tokens(target_samples, pad_idx=self.cap_dict.pad(), eos_idx=self.cap_dict.eos(), move_eos_to_beginning=False)
         rotate_batch = data_utils.collate_tokens(target_samples, pad_idx=self.cap_dict.pad(), eos_idx=self.cap_dict.eos(), move_eos_to_beginning=True)
 
         return {
             'id': indices,
             'net_input': {
-                'src_tokens': source_feature_batch,
-                'src_locations': source_location_batch,
-                'src_lengths': source_lengths,
+                'source': source_batch,
                 'prev_output_tokens': rotate_batch,
             },
             'target': target_batch,

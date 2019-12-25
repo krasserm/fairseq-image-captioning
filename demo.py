@@ -1,9 +1,11 @@
+import os
+import data
 import torch
 
 from fairseq import options, tasks, checkpoint_utils
 from fairseq.data import encoders
 
-import data
+from PIL import Image
 
 
 def main(args):
@@ -35,32 +37,28 @@ def main(args):
             x = tokenizer.decode(x)
         return x
 
-    image_ids = data.read_image_ids('output/valid-ids.txt')
+    transform = data.default_transform()
 
-    if args.features == 'grid':
-        image_ds = data.GridFeaturesDataset('output/valid-features-grid', image_ids)
-    elif args.features == 'obj':
-        image_md = data.read_image_metadata('output/valid-features-obj/metadata.csv')
-        image_ds = data.ObjectFeaturesDataset('output/valid-features-obj', image_ids, image_md)
-    else:
-        raise ValueError(f'Invalid --features option: {args.features}')
+    image_ids_path_dict = data.read_split_image_ids_and_paths_dict('valid')
 
     with open(args.input) as f:
         sample_ids = [line.rstrip('\n') for line in f]
 
     for sample_id in sample_ids:
-        features, locations = image_ds.read_data(int(sample_id))
-        length = features.shape[0]
+        sample_path = os.path.join(args.ms_coco_dir, 'images', image_ids_path_dict[int(sample_id)])
+        with Image.open(sample_path).convert('RGB') as img:
+            img_tensor = transform(img).unsqueeze(0)
+
+        src_tokens = torch.zeros(1, 0)
 
         if use_cuda:
-            features = features.cuda()
-            locations = locations.cuda()
+            img_tensor = img_tensor.cuda()
+            src_tokens = src_tokens.cuda()
 
         sample = {
             'net_input': {
-                'src_tokens': features.unsqueeze(0),
-                'src_locations': locations.unsqueeze(0),
-                'src_lengths': [length]
+                'src_tokens': src_tokens,
+                'source': img_tensor,
             }
         }
 

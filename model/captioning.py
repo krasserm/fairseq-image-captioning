@@ -1,11 +1,8 @@
-import modules
-
 import torch
 import torch.nn.functional as F
 
-from torchvision import models
-from torchvision.models.utils import load_state_dict_from_url
-from torchvision.models.inception import model_urls
+from modules import FeatureEmbedding, SpatialEmbedding
+from model.inception import inception_v3_base
 
 from fairseq.models import FairseqEncoder, BaseFairseqModel
 from fairseq.models import register_model, register_model_architecture, transformer
@@ -25,28 +22,37 @@ def create_padding_mask(src_tokens, src_lengths):
 class SimplisticCaptioningEncoder(FairseqEncoder):
     def __init__(self, args):
         super().__init__(dictionary=None)
-        self.feature_embedding = modules.FeatureEmbedding(args) \
+        self.feature_dim = args.feature_dim
+        # TODO: make pretrained configurable
+        self.inception = inception_v3_base(pretrained=True, aux_logits=False)
+        self.locations = torch.nn.Parameter(self.inception.grid_locations, requires_grad=False)
+
+        self.feature_embedding = FeatureEmbedding(args) \
             if not args.no_projection else None
-        self.location_embedding = modules.SpatialEmbedding(args) \
+        self.location_embedding = SpatialEmbedding(args) \
             if args.feature_spatial_embeddings else None
 
-    def forward(self, src_tokens, src_lengths, src_locations, **kwargs):
-        x = src_tokens
+        for param in self.inception.parameters():
+            # TODO: make configurable
+            param.requires_grad = True
+
+    def forward(self, source, **kwargs):
+        x = self.inception(source).permute(0, 2, 3, 1).view(-1, self.locations.shape[0], self.feature_dim)
 
         if self.feature_embedding is not None:
-            x = self.feature_embedding(src_tokens)
+            x = self.feature_embedding(x)
         if self.location_embedding is not None:
-            x += self.location_embedding(src_locations)
-
-        # B x T x C -> T x B x C
-        enc_out = x.transpose(0, 1)
+            x += self.location_embedding(self.locations)
 
         # compute padding mask
-        enc_padding_mask = create_padding_mask(src_tokens, src_lengths)
+        encoder_padding_mask = create_padding_mask(x, [self.locations.shape[0]] * source.shape[0])
+
+        # B x T x C -> T x B x C
+        encoder_out = x.transpose(0, 1)
 
         return {
-            'encoder_out': enc_out,
-            'encoder_padding_mask': enc_padding_mask
+            'encoder_out': encoder_out,
+            'encoder_padding_mask': encoder_padding_mask
         }
 
     def reorder_encoder_out(self, encoder_out, new_order):
@@ -61,24 +67,35 @@ class SimplisticCaptioningEncoder(FairseqEncoder):
 
 class TransformerCaptioningEncoder(transformer.TransformerEncoder):
     def __init__(self, args):
-        super().__init__(args, None, modules.FeatureEmbedding(args))
-        self.location_embedding = modules.SpatialEmbedding(args) \
+        super().__init__(args, None, FeatureEmbedding(args))
+        self.feature_dim = args.feature_dim
+        # TODO: make pretrained configurable
+        self.inception = inception_v3_base(pretrained=True, aux_logits=False)
+        self.locations = torch.nn.Parameter(self.inception.grid_locations, requires_grad=False)
+
+        self.location_embedding = SpatialEmbedding(args) \
             if args.feature_spatial_embeddings else None
 
-    def forward(self, src_tokens, src_lengths, src_locations, **kwargs):
+        for param in self.inception.parameters():
+            # TODO: make configurable
+            param.requires_grad = True
+
+    def forward(self, source, **kwargs):
+        x = self.inception(source).permute(0, 2, 3, 1).view(-1, self.locations.shape[0], self.feature_dim)
+
         # embed tokens and positions
-        x = self.embed_scale * self.embed_tokens(src_tokens)
+        x = self.embed_scale * self.embed_tokens(x)
 
         if self.location_embedding is not None:
-            x += self.location_embedding(src_locations)
+            x += self.location_embedding(self.locations)
 
         x = F.dropout(x, p=self.dropout, training=self.training)
 
+        # compute padding mask
+        encoder_padding_mask = create_padding_mask(x, [self.locations.shape[0]] * source.shape[0])
+
         # B x T x C -> T x B x C
         x = x.transpose(0, 1)
-
-        # compute padding mask
-        encoder_padding_mask = create_padding_mask(src_tokens, src_lengths)
 
         # encoder layers
         for layer in self.layers:
@@ -97,7 +114,7 @@ class CaptioningModel(BaseFairseqModel):
     @staticmethod
     def add_args(parser):
         transformer.TransformerModel.add_args(parser)
-        parser.add_argument('--features-dim', type=int, default=2048,
+        parser.add_argument('--feature-dim', type=int, default=2048,
                             help='visual features dimension')
         parser.add_argument('--feature-spatial-embeddings', default=False, action='store_true',
                             help='use feature spatial embeddings')
@@ -135,8 +152,8 @@ class CaptioningModel(BaseFairseqModel):
         self.encoder = encoder
         self.decoder = decoder
 
-    def forward(self, src_tokens, src_lengths, prev_output_tokens, **kwargs):
-        encoder_out = self.encoder(src_tokens, src_lengths=src_lengths, **kwargs)
+    def forward(self, source, prev_output_tokens, **kwargs):
+        encoder_out = self.encoder(source, **kwargs)
         decoder_out = self.decoder(prev_output_tokens, encoder_out=encoder_out, **kwargs)
 
         return decoder_out
@@ -182,77 +199,3 @@ def default_captioning_arch(args):
 def simplistic_captioning_arch(args):
     if args.no_projection:
         args.encoder_embed_dim = args.features_dim
-
-
-class Inception3Base(models.inception.Inception3):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def forward(self, x):
-        if self.transform_input:
-            x_ch0 = torch.unsqueeze(x[:, 0], 1) * (0.229 / 0.5) + (0.485 - 0.5) / 0.5
-            x_ch1 = torch.unsqueeze(x[:, 1], 1) * (0.224 / 0.5) + (0.456 - 0.5) / 0.5
-            x_ch2 = torch.unsqueeze(x[:, 2], 1) * (0.225 / 0.5) + (0.406 - 0.5) / 0.5
-            x = torch.cat((x_ch0, x_ch1, x_ch2), 1)
-        # N x 3 x 299 x 299
-        x = self.Conv2d_1a_3x3(x)
-        # N x 32 x 149 x 149
-        x = self.Conv2d_2a_3x3(x)
-        # N x 32 x 147 x 147
-        x = self.Conv2d_2b_3x3(x)
-        # N x 64 x 147 x 147
-        x = F.max_pool2d(x, kernel_size=3, stride=2)
-        # N x 64 x 73 x 73
-        x = self.Conv2d_3b_1x1(x)
-        # N x 80 x 73 x 73
-        x = self.Conv2d_4a_3x3(x)
-        # N x 192 x 71 x 71
-        x = F.max_pool2d(x, kernel_size=3, stride=2)
-        # N x 192 x 35 x 35
-        x = self.Mixed_5b(x)
-        # N x 256 x 35 x 35
-        x = self.Mixed_5c(x)
-        # N x 288 x 35 x 35
-        x = self.Mixed_5d(x)
-        # N x 288 x 35 x 35
-        x = self.Mixed_6a(x)
-        # N x 768 x 17 x 17
-        x = self.Mixed_6b(x)
-        # N x 768 x 17 x 17
-        x = self.Mixed_6c(x)
-        # N x 768 x 17 x 17
-        x = self.Mixed_6d(x)
-        # N x 768 x 17 x 17
-        x = self.Mixed_6e(x)
-        # N x 768 x 17 x 17
-        if self.training and self.aux_logits:
-            aux = self.AuxLogits(x)
-        # N x 768 x 17 x 17
-        x = self.Mixed_7a(x)
-        # N x 1280 x 8 x 8
-        x = self.Mixed_7b(x)
-        # N x 2048 x 8 x 8
-        x = self.Mixed_7c(x)
-        # N x 2048 x 8 x 8
-        return x
-
-
-def inception_v3_base(pretrained=False, progress=True, **kwargs):
-    if pretrained:
-        if 'transform_input' not in kwargs:
-            kwargs['transform_input'] = True
-        if 'aux_logits' in kwargs:
-            original_aux_logits = kwargs['aux_logits']
-            kwargs['aux_logits'] = True
-        else:
-            original_aux_logits = True
-        model = Inception3Base(**kwargs)
-        state_dict = load_state_dict_from_url(model_urls['inception_v3_google'],
-                                              progress=progress)
-        model.load_state_dict(state_dict)
-        if not original_aux_logits:
-            model.aux_logits = False
-            del model.AuxLogits
-        return model
-
-    return Inception3Base(**kwargs)
