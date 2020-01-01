@@ -1,0 +1,4 @@
+[submodule "external/coco-caption"]
+	path = external/coco-caption
+	url = https://github.com/flauted/coco-caption
+	ignore = dirty
