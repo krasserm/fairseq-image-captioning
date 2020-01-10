@@ -44,19 +44,19 @@ class SimplisticCaptioningEncoder(FairseqEncoder):
         # compute padding mask
         enc_padding_mask = create_padding_mask(src_tokens, src_lengths)
 
-        return {
-            'encoder_out': enc_out,
-            'encoder_padding_mask': enc_padding_mask
-        }
+        return transformer.EncoderOut(encoder_out=enc_out,
+                                      encoder_padding_mask=enc_padding_mask,
+                                      encoder_embedding=None,
+                                      encoder_states=None)
 
     def reorder_encoder_out(self, encoder_out, new_order):
-        enc_out = encoder_out['encoder_out']
-        enc_padding_mask = encoder_out['encoder_padding_mask']
+        enc_out = encoder_out.encoder_out
+        enc_padding_mask = encoder_out.encoder_padding_mask
 
-        return {
-            'encoder_out': enc_out.index_select(1, new_order),
-            'encoder_padding_mask': enc_padding_mask.index_select(0, new_order)
-        }
+        return transformer.EncoderOut(encoder_out=enc_out.index_select(1, new_order),
+                                      encoder_padding_mask=enc_padding_mask.index_select(0, new_order),
+                                      encoder_embedding=None,
+                                      encoder_states=None)
 
 
 class TransformerCaptioningEncoder(transformer.TransformerEncoder):
@@ -87,10 +87,10 @@ class TransformerCaptioningEncoder(transformer.TransformerEncoder):
         if self.layer_norm:
             x = self.layer_norm(x)
 
-        return {
-            'encoder_out': x,  # T x B x C
-            'encoder_padding_mask': encoder_padding_mask,  # B x T
-        }
+        return transformer.EncoderOut(encoder_out=x,
+                                      encoder_padding_mask=encoder_padding_mask,
+                                      encoder_embedding=None,
+                                      encoder_states=None)
 
 
 class CaptioningModel(BaseFairseqModel):
@@ -140,6 +140,9 @@ class CaptioningModel(BaseFairseqModel):
         decoder_out = self.decoder(prev_output_tokens, encoder_out=encoder_out, **kwargs)
 
         return decoder_out
+
+    def forward_decoder(self, prev_output_tokens, **kwargs):
+        return self.decoder(prev_output_tokens, **kwargs)
 
     def max_decoder_positions(self):
         return self.decoder.max_positions()

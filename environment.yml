@@ -14,6 +14,6 @@ dependencies:
   - scikit-image=0.16.2
   - pip
   - pip:
-      - fairseq==0.8.0
+      - fairseq==0.9.0
       - sacremoses==0.0.35
       - subword-nmt==0.3.6
