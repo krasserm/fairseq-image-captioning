@@ -110,8 +110,8 @@ project implements the following extensions:
 - `--arch simplistic-captioning-arch`. Uses the same decoder as in `default-captioning-arch` but no transformer encoder.
   Image features are processed directly by the decoder after projecting them into a lower-dimensional space which can
   be controlled with `--encoder-embed-dim`. Projection into lower-dimensional space can be skipped with `--no-projection`.
-- `--feature-spatial-embeddings`. Learns positional (spatial) embeddings of bounding boxes or grid tiles. Disabled by default. 
-  Positional embeddings are learned from the top-left and bottom-right coordinates of boxes/tiles and their relative sizes.
+- `--feature-spatial-encoding`. Learns spatial (positional) encodings of bounding boxes or grid tiles. Disabled by default. 
+  Positional encodings are learned of the top-left and bottom-right coordinates of boxes/tiles and their relative sizes.
   
 ## Training
 

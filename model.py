@@ -25,18 +25,18 @@ def create_padding_mask(src_tokens, src_lengths):
 class SimplisticCaptioningEncoder(FairseqEncoder):
     def __init__(self, args):
         super().__init__(dictionary=None)
-        self.feature_embedding = modules.FeatureEmbedding(args) \
+        self.feature_projection = modules.FeatureProjection(args) \
             if not args.no_projection else None
-        self.location_embedding = modules.SpatialEmbedding(args) \
-            if args.feature_spatial_embeddings else None
+        self.spatial_encoding = modules.SpatialEncoding(args) \
+            if args.feature_spatial_encoding else None
 
     def forward(self, src_tokens, src_lengths, src_locations, **kwargs):
         x = src_tokens
 
-        if self.feature_embedding is not None:
-            x = self.feature_embedding(src_tokens)
-        if self.location_embedding is not None:
-            x += self.location_embedding(src_locations)
+        if self.feature_projection is not None:
+            x = self.feature_projection(src_tokens)
+        if self.spatial_encoding is not None:
+            x += self.spatial_encoding(src_locations)
 
         # B x T x C -> T x B x C
         enc_out = x.transpose(0, 1)
@@ -61,16 +61,16 @@ class SimplisticCaptioningEncoder(FairseqEncoder):
 
 class TransformerCaptioningEncoder(transformer.TransformerEncoder):
     def __init__(self, args):
-        super().__init__(args, None, modules.FeatureEmbedding(args))
-        self.location_embedding = modules.SpatialEmbedding(args) \
-            if args.feature_spatial_embeddings else None
+        super().__init__(args, None, modules.FeatureProjection(args))
+        self.spatial_encoding = modules.SpatialEncoding(args) \
+            if args.feature_spatial_encoding else None
 
     def forward(self, src_tokens, src_lengths, src_locations, **kwargs):
         # embed tokens and positions
         x = self.embed_scale * self.embed_tokens(src_tokens)
 
-        if self.location_embedding is not None:
-            x += self.location_embedding(src_locations)
+        if self.spatial_encoding is not None:
+            x += self.spatial_encoding(src_locations)
 
         x = F.dropout(x, p=self.dropout, training=self.training)
 
@@ -99,8 +99,8 @@ class CaptioningModel(BaseFairseqModel):
         transformer.TransformerModel.add_args(parser)
         parser.add_argument('--features-dim', type=int, default=2048,
                             help='visual features dimension')
-        parser.add_argument('--feature-spatial-embeddings', default=False, action='store_true',
-                            help='use feature spatial embeddings')
+        parser.add_argument('--feature-spatial-encoding', default=False, action='store_true',
+                            help='use feature spatial encoding')
 
     @classmethod
     def build_model(cls, args, task):

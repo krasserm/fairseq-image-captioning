@@ -1,8 +1,10 @@
 import torch.nn as nn
 
 
-class FeatureEmbedding(nn.Module):
-    """Models a learned embedding of visual features.
+class FeatureProjection(nn.Module):
+    """
+    Projects image features into a space of
+    dimensionality `args.encoder_embed_dim`.
     """
 
     def __init__(self, args):
@@ -18,8 +20,10 @@ class FeatureEmbedding(nn.Module):
         return self.linear(x)
 
 
-class SpatialEmbedding(nn.Module):
-    """Models a learned embedding of spatial positions.
+class SpatialEncoding(nn.Module):
+    """
+    Encodes bounding box coordinates and relative sizes
+    as vector of dimensionality `args.encoder_embed_dim`.
     """
 
     def __init__(self, args):
