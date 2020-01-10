@@ -164,21 +164,21 @@ python inference.py \
        --bpe-codes output/codes.txt \
        --beam 5 \
        --path .checkpoints/checkpoint_best.pt \
-       --split valid \
-       --input demo/val-images.txt \
-       --output demo/val-predictions.json
+       --split test \
+       --input demo/test-images.txt \
+       --output demo/test-predictions.json
 ```
 
-Image IDs are read from [demo/val-images.txt](demo/val-images.txt) in this sample. 
+Image IDs are read from [demo/test-images.txt](demo/test-images.txt) in this sample. 
 This should produce an output containing something like:
 
 ```
-105537: A street sign hanging from the side of a metal pole.
-130599: A man standing next to a giraffe statue.
+314251: A group of people riding bikes down a street.
+208408: A black and white photo of a person walking on a sidewalk.
 ...
 ```
 
-Furthermore, the predictions are stored in [demo/val-predictions.json](demo/val-predictions.json).
+Furthermore, the predictions are stored in [demo/test-predictions.json](demo/test-predictions.json).
 
 ## Evaluation
 
@@ -207,23 +207,23 @@ cd external/coco-caption
 
 ### Model evaluation
 
-Evaluation of a model is performed using the `score.sh` script.
-This script uses the specified reference-captions as the ground truth and evaluates the model based on the generated captions provided as a json-file (created prior via the `inference.py` script).    
-    
-The following example calculates the evaluation scores for the generated captions provided in [demo/val-predictions.json](demo/val-predictions.json).
+Models can be evaluated with the `score.sh` script. This script uses the specified reference-captions as the
+ground truth and evaluates the model based on the generated captions provided as a json-file (created prior via the 
+`inference.py` script). The following example calculates the evaluation scores for the generated captions provided in 
+[demo/test-predictions.json](demo/test-predictions.json).
 
 ```
 ./score.sh \
         --reference-captions external/coco-caption/annotations/captions_val2014.json \
-        --system-captions demo/val-predictions.json
+        --system-captions demo/test-predictions.json
 ```
 
-### Evaluating model performance on the validation set
+### Evaluating model performance on the test set
 
-To evaluate a trained model on the validation-set, the following command sequence should be used:
+To evaluate a trained model on the test set, the following command sequence should be used:
 
 ```
-# Generate captions for all images in the Karpathy validation set
+# Generate captions for all images in the Karpathy test set
 python inference.py \
        --features grid \
        --features-dir output \
@@ -234,22 +234,24 @@ python inference.py \
        --bpe-codes output/codes.txt \
        --beam 5 \
        --path .checkpoints/checkpoint_best.pt \
-       --split valid \
-       --input output/valid-ids.txt \
-       --output output/valid-predictions.json
+       --split test \
+       --input output/test-ids.txt \
+       --output output/test-predictions.json
 
 # Score the generated captions
 ./score.sh \
         --reference-captions external/coco-caption/annotations/captions_val2014.json \
-        --system-captions output/valid-predictions.json
+        --system-captions output/test-predictions.json
 ```
 
-*Note:* The `valid` set used to evaluate the model is taken from the [Karpathy splits](splits) and is a subset of the official MS-COCO `val2014` set.
+Note that the `test` set used to evaluate the model is taken from the [Karpathy splits](splits) and is a subset of the 
+official MS-COCO `val2014` set.
 
 ### Pre-trained model
 
 A model obtained with the [training](#training) command above is available for download ([checkpoint_demo.pt](https://drive.google.com/open?id=1GWLenxZivitAcniSUXRcaC8N8b5_7two)).
-Assuming you've downloaded the file to the project's root directory you can run the demo with 
+**It has only been trained for a few epochs, so don't expect high-quality captions.**  Assuming you've downloaded the 
+model file to the project's root directory you can run the demo with 
 
 ```
 python inference.py \
@@ -262,16 +264,16 @@ python inference.py \
        --bpe-codes output/codes.txt \
        --beam 5 \
        --path checkpoint_demo.pt \
-       --split valid \
-       --input demo/val-images.txt
+       --split test \
+       --input demo/test-images.txt
 ```
 
-Two sample validation images and their produced captions are:
+Two sample test images and their produced captions are:
 
-![130599](demo/COCO_val2014_000000130599.jpg)
+![130599](demo/COCO_val2014_000000314251.jpg)
 
-"A man standing next to a giraffe statue."
+"A group of people riding bikes down a street."
 
-![105537](demo/COCO_val2014_000000105537.jpg)
+![105537](demo/COCO_val2014_000000208408.jpg)
 
-"A street sign hanging from the side of a metal pole."
+"A black and white photo of a person walking on a sidewalk."
