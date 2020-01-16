@@ -7,6 +7,9 @@ don't use it for any serious work. The current implementation is based on ideas 
 - Jun Yu, Jing Li, Zhou Yu, and Qingming Huang. [Multimodal transformer with multi-view visual
   representation for image captioning](https://arxiv.org/abs/1905.07841). arXiv preprint arXiv:1905.07841, 2019.
   
+- X. Zhu, L. Li, L. Jing, H. Peng, X. Niu. [Captioning Transformer with Stacked Attention Modules](https://www.mdpi.com/2076-3417/8/5/739). 
+  Appl. Sci. 2018, 8, 739
+
 - Piyush Sharma, Nan Ding, Sebastian Goodman, and Radu Soricut. [Conceptual captions: A cleaned, hypernymed, image 
   alt-text dataset for automatic image captioning](https://www.aclweb.org/anthology/P18-1238/). In ACL, 2018.
 
