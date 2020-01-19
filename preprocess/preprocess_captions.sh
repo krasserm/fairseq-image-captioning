@@ -25,7 +25,9 @@ case $key in
 esac
 done
 
-TOK_FILE="$OUT_DIR"/"${SPLIT}-captions.tok.en"
+TOK_PREF="$OUT_DIR"/"${SPLIT}-captions.tok"
+TOK_FILE="${TOK_PREF}.en"
+
 BPE_PREF="$OUT_DIR"/"${SPLIT}-captions.bpe"
 BPE_FILE="${BPE_PREF}.en"
 
@@ -51,8 +53,8 @@ then
     rm -f $OUT_DIR/dict.en.txt
 
     echo "Generate vocabulary and train dataset files ..."
-    # TODO: consider using --nwordssrc and --thresholdsrc options
-    fairseq-preprocess --source-lang en --only-source --trainpref $BPE_PREF --destdir $OUT_DIR
+    # TODO: consider using --nwordssrc option
+    fairseq-preprocess --source-lang en --only-source --trainpref $BPE_PREF --destdir $OUT_DIR --thresholdsrc 0
 
     mv $OUT_DIR/train.en-None.en.bin $OUT_DIR/train-captions.en.bin
     mv $OUT_DIR/train.en-None.en.idx $OUT_DIR/train-captions.en.idx

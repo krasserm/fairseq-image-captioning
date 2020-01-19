@@ -44,9 +44,11 @@ def tokenize_captions(captions, lang='en'):
     return [tokenizer.tokenize(caption, return_str=True) for caption in captions]
 
 
-def write_captions(captions, filename):
+def write_captions(captions, filename, lowercase=True):
     with open(filename, 'w') as f:
         for caption in captions:
+            if lowercase:
+                caption = caption.lower()
             f.write(caption + '\n')
 
 

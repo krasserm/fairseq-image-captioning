@@ -178,7 +178,7 @@ class SimplisticCaptioningModel(CaptioningModel):
 
 @register_model_architecture('default-captioning-model', 'default-captioning-arch')
 def default_captioning_arch(args):
-    args.encoder_layers = getattr(args, 'encoder_layers', 2)
+    args.encoder_layers = getattr(args, 'encoder_layers', 3)
 
 
 @register_model_architecture('simplistic-captioning-model', 'simplistic-captioning-arch')

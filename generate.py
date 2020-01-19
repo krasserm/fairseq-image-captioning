@@ -35,16 +35,16 @@ def predict(image_id_path: str,
     task = tasks.setup_task(model_args)
     captions_dict = task.target_dictionary
 
-    models, _model_args = checkpoint_utils.load_model_ensemble([model_args.path], task=task)
-    model = models[0]
+    models, _model_args = checkpoint_utils.load_model_ensemble(model_args.path.split(':'), task=task)
 
-    model.make_generation_fast_(
-        beamable_mm_beam_size=None if model_args.no_beamable_mm else model_args.beam,
-        need_attn=model_args.print_alignment,
-    )
+    for model in models:
+        model.make_generation_fast_(
+            beamable_mm_beam_size=None if model_args.no_beamable_mm else model_args.beam,
+            need_attn=model_args.print_alignment,
+        )
 
-    if torch.cuda.is_available() and not model_args.cpu:
-        model.cuda()
+        if torch.cuda.is_available() and not model_args.cpu:
+            model.cuda()
 
     generator = task.build_generator(model_args)
     tokenizer = encoders.build_tokenizer(model_args)

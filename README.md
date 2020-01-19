@@ -1,26 +1,57 @@
 # Image Captioning Transformer
 
-This project implements [Transformer](https://arxiv.org/abs/1706.03762)\-based image captioning models as extension of 
-the [pytorch/fairseq](https://github.com/pytorch/fairseq) sequence modeling toolkit. It is still in an early stage, 
-don't use it for any serious work. The current implementation is based on ideas from the following papers:
+This projects extends [pytorch/fairseq](https://github.com/pytorch/fairseq) with 
+[Transformer](https://arxiv.org/abs/1706.03762)\-based image captioning models. It is still in an early stage, only 
+baseline models are available at the moment. These are based on ideas from the following papers:
 
-- Jun Yu, Jing Li, Zhou Yu, and Qingming Huang. [Multimodal transformer with multi-view visual
+1. Jun Yu, Jing Li, Zhou Yu, and Qingming Huang. [Multimodal transformer with multi-view visual
   representation for image captioning](https://arxiv.org/abs/1905.07841). arXiv preprint arXiv:1905.07841, 2019.
   
-- X. Zhu, L. Li, L. Jing, H. Peng, X. Niu. [Captioning Transformer with Stacked Attention Modules](https://www.mdpi.com/2076-3417/8/5/739). 
+2. X. Zhu, L. Li, L. Jing, H. Peng, X. Niu. [Captioning Transformer with Stacked Attention Modules](https://www.mdpi.com/2076-3417/8/5/739). 
   Appl. Sci. 2018, 8, 739
 
-- Piyush Sharma, Nan Ding, Sebastian Goodman, and Radu Soricut. [Conceptual captions: A cleaned, hypernymed, image 
-  alt-text dataset for automatic image captioning](https://www.aclweb.org/anthology/P18-1238/). In ACL, 2018.
-
-- P. Anderson, X. He, C. Buehler, D. Teney, M. Johnson, S. Gould, and L. Zhang. [Bottom-up and top-down
+3. P. Anderson, X. He, C. Buehler, D. Teney, M. Johnson, S. Gould, and L. Zhang. [Bottom-up and top-down
   attention for image captioning and visual question answering](https://arxiv.org/abs/1707.07998). 
   In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition, pages 6077–6086, 2018.
+
+See also section [Training](#training) for pre-trained models and their performance. Over time, more and more 
+details from these and other papers will be implemented to further push model performance. Instead of reproducing 
+the results of a single paper, main goal of this project is to combine selected approaches from several papers.
+
+## Baseline architecture
+
+The following figure gives an overview of the baseline model architectures. 
+
+![architecture](docs/baseline.jpg)
+
+The *default baseline architecture* uses a Transformer encoder for self-attention on visual features and a Transformer 
+decoder for masked self-attention on caption tokens and for visio-linguistic (= encoder-decoder) attention. A linear 
+layer projects visual features into the usually lower-dimensional representation space of the encoder. 
+
+The *simplistic baseline architecture* doesn't use a Transformer encoder and projected visual features are directly 
+processed by the Transformer decoder. In both architectures, visual features from images can be either extracted  with 
+a Faster R-CNN model as described in \[3\] or from fixed grid tiles (8x8) using an Inception V3 model.   
+
+![features](docs/features.jpg)
+
+## Fairseq extensions
+
+The following extensions to the [fairseq command line tools](https://fairseq.readthedocs.io/en/latest/command_line_tools.html) are implemented:
+
+- `--task captioning`. Enables the image captioning functionality. 
+- `--arch default-captioning-arch`. Uses a transformer encoder to process image features (3 layers by default) and a 
+  transformer decoder to process image captions and encoder output (6 layers by default). The number of encoder and 
+  decoder layers can be adjusted with `--encoder-layers` and `--decoder-layers`, respectively.
+- `--arch simplistic-captioning-arch`. Uses the same decoder as in `default-captioning-arch` but no transformer encoder.
+  Image features are processed directly by the decoder after projecting them into a lower-dimensional space which can
+  be controlled with `--encoder-embed-dim`. Projection into lower-dimensional space can be skipped with `--no-projection`.
+- `--features obj`. Use image features extracted from detected objects as described in \[3\].
+  Additionally use `--max-source-positions 100` when using this option.
+- `--features grid`. Use image features extracted from an 8 x 8 grid. Inception v3 is used for extracting image features. 
+  Additionally use `--max-source-positions 64` when using this option. 
+- `--feature-spatial-encoding`. Learn spatial (2D-positional) encoding of bounding boxes or grid tiles. Disabled by default. 
+  Positional encodings are learned from bounding box or grid tile coordinates and their size.
   
-- Kelvin Xu, Jimmy Ba, Ryan Kiros, Kyunghyun Cho, Aaron Courville, Ruslan Salakhudinov, Rich Zemel, and Yoshua
-  Bengio. [Show, Attend and Tell: Neural image caption generation with visual attention](https://arxiv.org/abs/1502.03044). 
-  In International Conference on Machine Learning. 2015.
-   
 ## Setup
 
 ### Environment
@@ -51,7 +82,7 @@ ms-coco
 
 MS-COCO images are needed when training with the `--features grid` command line option. Image features are then extracted
 from a fixed 8 x 8 grid on the image. When using the `--features obj` command line option image features are extracted 
-from detected objects (see also *bottom-up attention* in [this paper](https://arxiv.org/abs/1707.07998)).
+from detected objects as described in \[3\].
  
 Pre-computed features of detected objects (10-100 per image) are available in [this repository](https://github.com/peteanderson80/bottom-up-attention). 
 You can also use [this link](https://imagecaption.blob.core.windows.net/imagecaption/trainval.zip) for downloading them 
@@ -74,8 +105,8 @@ ms-coco
 ## Pre-processing
 
 For splitting the downloaded MS-COCO data into a training, validation and test set, [Karpathy splits](splits) are used. 
-Split files have been copied from [this location](https://github.com/peteanderson80/bottom-up-attention/tree/master/data/genome/coco_splits).
-All pre-processing commands in the following sub-sections write their results to the `output` directory.  
+Split files have been copied from [this repository](https://github.com/peteanderson80/bottom-up-attention/tree/master/data/genome/coco_splits).
+Pre-processing commands shown in the following sub-sections write their results to the `output` directory by default.  
 
 ### Pre-process captions
 
@@ -97,186 +128,176 @@ command line option.
 Converts pre-computed object features into a format required for model training. Only needed when training with the 
 `--features obj` command line option.
 
-## Extensions
-
-In addition to all [fairseq command line options](https://fairseq.readthedocs.io/en/latest/command_line_tools.html) this
-project implements the following extensions:
-
-- `--task captioning`. Enables the image captioning functionality implemented by this project. 
-- `--features grid`. Use image features extracted from an 8 x 8 grid. Inception v3 is used for extracting image features. 
-  Additionally use `--max-source-positions 64` when using this option. 
-- `--features obj`. Use image features extracted from detected objects as described in [this paper](https://arxiv.org/abs/1707.07998).
-  Additionally use `--max-source-positions 100` when using this option.
-- `--arch default-captioning-arch`. Uses a transformer encoder to process image features (2 layers by default) and a 
-  transformer decoder to process image captions and encoder output (6 layers by default). The number of encoder and 
-  decoder layers can be adjusted with `--encoder-layers` and `--decoder-layers`, respectively.
-- `--arch simplistic-captioning-arch`. Uses the same decoder as in `default-captioning-arch` but no transformer encoder.
-  Image features are processed directly by the decoder after projecting them into a lower-dimensional space which can
-  be controlled with `--encoder-embed-dim`. Projection into lower-dimensional space can be skipped with `--no-projection`.
-- `--feature-spatial-encoding`. Learns spatial (positional) encodings of bounding boxes or grid tiles. Disabled by default. 
-  Positional encodings are learned of the top-left and bottom-right coordinates of boxes/tiles and their relative sizes.
-  
 ## Training
 
-An example command for training a simple captioning model is:  
+A default baseline model can be trained with the following command. **Please note that this is just an example, hyper-
+parameters are not tuned yet**. 
 
 ```
 python -m fairseq_cli.train \
-       --task captioning \
-       --arch simplistic-captioning-arch \
-       --features grid \
-       --features-dir output \
-       --captions-dir output \
-       --user-dir task \
-       --save-dir .checkpoints \
-       --optimizer nag \
-       --lr 0.001 \
-       --criterion cross_entropy \
-       --max-epoch 50 \
-       --max-tokens 1024 \
-       --max-source-positions 64 \
-       --encoder-embed-dim 512 \
-       --log-interval 10 \
-       --save-interval-updates 1000 \
-       --keep-interval-updates 3 \
-       --num-workers 2 \
-       --no-epoch-checkpoints \
-       --no-progress-bar
+  --save-dir .checkpoints
+  --user-dir task \
+  --task captioning \
+  --arch default-captioning-arch \
+  --encoder-layers 3 \
+  --decoder-layers 6 \
+  --features obj \
+  --feature-spatial-encoding \
+  --optimizer adam \
+  --adam-betas "(0.9,0.999)" \
+  --lr 0.0003 \
+  --lr-scheduler inverse_sqrt \
+  --min-lr 1e-09 \
+  --warmup-init-lr 1e-8 \
+  --warmup-updates 8000 \
+  --criterion label_smoothed_cross_entropy \
+  --label-smoothing 0.1 \
+  --weight-decay 0.0001 \
+  --dropout 0.3 \
+  --max-epoch 25 \
+  --max-tokens 4096 \
+  --max-source-positions 100 \
+  --encoder-embed-dim 512 \
+  --num-workers 2
 ```
 
-See [Extensions](#extensions) for captioning-specific command line options. Checkpoints are written to a `.checkpoints` 
-directory and `.checkpoints/checkpoint_best.pt` should be used for testing. **Please note that the hyper-parameters used 
-here are just examples, they are not tuned yet**. 
+Checkpoints are written to the `.checkpoints` directory.
 
-## Inference
+### Pre-trained models
 
-Inference can be performed using the `inference.py` script to generate captions for images of a specified dataset.    
-A saved model, a file containing image IDs and the dataset-split these image IDs are taken from have to be supplied.
-An optional output path may be specified to store the predicted captions as a json-file.
+Checkpoints 18-21 from a training run with these settings on two NVIDIA GTX 1080 cards (8GB memory each) are available 
+for download.
 
-The following command shows an example usage of the script:
+- [checkpoint 18](https://drive.google.com/open?id=1cudwknaX3CjQtQsi6SRTVG3FLNE68tmA) 
+- [checkpoint 19](https://drive.google.com/open?id=1tttQwigvtT49tcpW8aZVNlrvKZqmKjcL) 
+- [checkpoint 20](https://drive.google.com/open?id=1UEGuVg02KY4SiWLX37ZAj3Nc8jVWnqnu) 
+- [checkpoint 21](https://drive.google.com/open?id=18Sax2pznZgFeNm_OtvCm42kalOCPhZgD) 
 
-```
-python inference.py \
-       --features grid \
-       --features-dir output \
-       --captions-dir output \
-       --user-dir task \
-       --tokenizer moses \
-       --bpe subword_nmt \
-       --bpe-codes output/codes.txt \
-       --beam 5 \
-       --path .checkpoints/checkpoint_best.pt \
-       --split test \
-       --input demo/test-images.txt \
-       --output demo/test-predictions.json
-```
+The best single model is checkpoint 20. Evaluation results for this model and an ensemble of all four checkpoints are 
+shown in the following table. These are compared to models in \[2\] and \[3\], trained with cross-entropy loss and 
+evaluated on the Karpathy test split.
 
-Image IDs are read from [demo/test-images.txt](demo/test-images.txt) in this sample. 
-This should produce an output containing something like:
+| Model | BLEU-1<sup>*</sup> | BLEU-4<sup>*</sup> | METEOR | ROUGE-L | CIDEr | SPICE |
+| :--- | :----: | :----: | :----: | :-----: | :---: | :----: |
+| \[2\] (single model) | 73.0 | 33.3 |   | 54.8 | 108.1 |  |
+| \[3\] (single model) | **77.2** | **36.2** | 27.0 | 56.4 | 113.5 | 20.3 |
+| Baseline (checkpoint 20)  | 74.8 | 34.8 | 28.0 | 56.2 | 112.9 | **21.1** |
+| Baseline (checkpoints 18-21)  | 74.7 | 35.2 | **28.3** | **56.5** | **114.8** | **21.1** |
 
-```
-314251: A group of people riding bikes down a street.
-208408: A black and white photo of a person walking on a sidewalk.
-...
-```
-
-Furthermore, the predictions are stored in [demo/test-predictions.json](demo/test-predictions.json).
+<sup>*</sup> It must be investigated if there's an [inconsistency in reported BLEU scores](https://arxiv.org/abs/1804.08771). 
 
 ## Evaluation
 
-### Installation of dependencies
+### Setup
 
 Evaluation is performed using a [Python 3 Fork](https://github.com/flauted/coco-caption) of the
 [COCO Caption Evaluation](https://github.com/tylin/coco-caption) library. This library is included
-as a [Git Submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules) in the path `external/coco-caption`.
-
-Download the submodule using following commands:
+as a [Git Submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules) in the path `external/coco-caption`. Download 
+the submodule with the following commands:
 
 ```
 git submodule init
 git submodule update
 ``` 
 
-Furthermore, the COCO Caption Evaluation library uses the [Stanford CoreNLP 3.6.0](https://stanfordnlp.github.io/CoreNLP/index.html) toolset
-which must be downloaded prior to the first execution of the scoring script. 
-
-It is important to change into the submodules root folder before executing the script to download the required files:
+Furthermore, the COCO Caption Evaluation library uses the [Stanford CoreNLP 3.6.0](https://stanfordnlp.github.io/CoreNLP/index.html) 
+toolset which must be downloaded prior to the first execution of the scoring script. It is important to change into the 
+submodules root folder before executing the script to download the required files:
 
 ```
 cd external/coco-caption
 ./get_stanford_models.sh
 ```
 
-### Model evaluation
+### Generate captions 
 
-Models can be evaluated with the `score.sh` script. This script uses the specified reference-captions as the
-ground truth and evaluates the model based on the generated captions provided as a json-file (created prior via the 
-`inference.py` script). The following example calculates the evaluation scores for the generated captions provided in 
-[demo/test-predictions.json](demo/test-predictions.json).
+Captions can be generated for images in the Karpathy test split with the following command.
+
+```
+python generate.py \
+--user-dir task \
+--features obj \
+--tokenizer moses \
+--bpe subword_nmt \
+--bpe-codes output/codes.txt \
+--beam 3 \
+--split test \
+--path .checkpoints/checkpoint_best.pt \
+--input output/test-ids.txt \
+--output output/test-predictions.json
+```
+
+This example uses the best checkpoint from a training run (`--path .checkpoints/checkpoint_best.pt`). To generate 
+captions with a pre-trained baseline model download checkpoint 20 to the project's root directory and use
+`--path checkpoint20.pt` instead. To generate captions with the full ensemble additionally download checkpoints
+18, 19 and 21 and use `--path checkpoint18.pt:checkpoint19.pt:checkpoint20.pt:checkpoint21.pt`.
+
+### Calculate metrics  
+
+Metrics can be calculated with the `score.sh` script. This script uses the specified reference-captions as the
+ground truth and evaluates the model based on the generated captions provided as a JSON file (created with the 
+`generate.py` script). The following example calculates metrics for captions contained in 
+`output/test-predictions.json`.
 
 ```
 ./score.sh \
-        --reference-captions external/coco-caption/annotations/captions_val2014.json \
-        --system-captions demo/test-predictions.json
+  --reference-captions external/coco-caption/annotations/captions_val2014.json \
+  --system-captions output/test-predictions.json
 ```
 
-### Evaluating model performance on the test set
-
-To evaluate a trained model on the test set, the following command sequence should be used:
-
-```
-# Generate captions for all images in the Karpathy test set
-python inference.py \
-       --features grid \
-       --features-dir output \
-       --captions-dir output \
-       --user-dir task \
-       --tokenizer moses \
-       --bpe subword_nmt \
-       --bpe-codes output/codes.txt \
-       --beam 5 \
-       --path .checkpoints/checkpoint_best.pt \
-       --split test \
-       --input output/test-ids.txt \
-       --output output/test-predictions.json
-
-# Score the generated captions
-./score.sh \
-        --reference-captions external/coco-caption/annotations/captions_val2014.json \
-        --system-captions output/test-predictions.json
-```
-
-Note that the `test` set used to evaluate the model is taken from the [Karpathy splits](splits) and is a subset of the 
-official MS-COCO `val2014` set.
-
-### Pre-trained model
-
-A model obtained with the [training](#training) command above is available for download ([checkpoint_demo.pt](https://drive.google.com/open?id=1GWLenxZivitAcniSUXRcaC8N8b5_7two)).
-**It has only been trained for a few epochs, so don't expect high-quality captions.**  Assuming you've downloaded the 
-model file to the project's root directory you can run the demo with 
+Note `output/test-predictions.json` contains captions generated for the Karpathy test split which is a subset of the
+images contained in the official MS-COCO validation set `external/coco-caption/annotations/captions_val2014.json`. For 
+captions generated with the full baseline ensemble this should produce an output like
 
 ```
-python inference.py \
-       --features grid \
-       --features-dir output \
-       --captions-dir output \
-       --user-dir task \
-       --tokenizer moses \
-       --bpe subword_nmt \
-       --bpe-codes output/codes.txt \
-       --beam 5 \
-       --path checkpoint_demo.pt \
-       --split test \
-       --input demo/test-images.txt
+...
+
+Scores:
+=======
+Bleu_1: 0.747
+Bleu_2: 0.587
+Bleu_3: 0.454
+Bleu_4: 0.352
+METEOR: 0.283
+ROUGE_L: 0.565
+CIDEr: 1.148
+SPICE: 0.211
 ```
 
-Two sample test images and their produced captions are:
+## Demo
 
-![130599](demo/COCO_val2014_000000314251.jpg)
+To generate captions with the baseline ensemble for some test set images contained in [demo/test-images.txt](demo/demo-ids.txt), 
+run the following command: 
 
-"A group of people riding bikes down a street."
+```
+python generate.py \
+--user-dir task \
+--features obj \
+--tokenizer moses \
+--bpe subword_nmt \
+--bpe-codes output/codes.txt \
+--beam 3 \
+--split test \
+--path checkpoint18.pt:checkpoint19.pt:checkpoint20.pt:checkpoint21.pt \
+--input demo/demo-ids.txt \
+--output demo/demo-predictions.json
+```
 
-![105537](demo/COCO_val2014_000000208408.jpg)
+Alternatively use `--path checkpoint20.pt` to use a single baseline checkpoint instead of the ensemble. When using the
+ensemble you should see an output like
 
-"A black and white photo of a person walking on a sidewalk."
+```
+Predictions:
+============
+37729: a black and white cat sitting next to a vase of flowers.
+571746: a red and white train traveling down a snow covered slope.
+504005: a wok filled with broccoli and other vegetables.
+547502: four dogs are playing with a frisbee in the grass.
+10526: a man riding a skateboard down the side of a ramp.
+```
+
+Notebook [viewer.ipynb](viewer.ipynb) displays generated captions together with their images.
+
+![predictions](docs/predictions.png)
+
+You can of course use this viewer to show all results in `output/test-predictions.json` too.
