@@ -266,7 +266,7 @@ SPICE: 0.211
 
 ## Demo
 
-To generate captions with the baseline ensemble for some test set images contained in [demo/test-images.txt](demo/demo-ids.txt), 
+To generate captions with the baseline ensemble for some test set images contained in [demo/demo-ids.txt](demo/demo-ids.txt), 
 run the following command: 
 
 ```
