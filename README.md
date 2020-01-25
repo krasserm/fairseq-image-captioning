@@ -174,8 +174,9 @@ for download.
 - [checkpoint 21](https://drive.google.com/open?id=18Sax2pznZgFeNm_OtvCm42kalOCPhZgD) 
 
 The best single model is checkpoint 20. Evaluation results for this model and an ensemble of all four checkpoints are 
-shown in the following table. These are compared to models in \[2\] and \[3\], trained with cross-entropy loss and 
-evaluated on the Karpathy test split.
+shown in the following table. These are compared to models in \[2\] and \[3\], **trained with cross-entropy loss** (not
+fine-tuned with reinforcement learning yet, as described [here](https://arxiv.org/abs/1612.00563)) and evaluated on the 
+Karpathy test split.
 
 | Model | BLEU-1<sup>*</sup> | BLEU-4<sup>*</sup> | METEOR | ROUGE-L | CIDEr | SPICE |
 | :--- | :----: | :----: | :----: | :-----: | :---: | :----: |
