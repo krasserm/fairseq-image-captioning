@@ -7,7 +7,7 @@ import numpy as np
 from torchvision import transforms
 
 from data import ImageDataset, read_split_image_ids_and_paths
-from model import inception_v3_base
+from model.inception import inception_v3_base
 
 
 def main(args):

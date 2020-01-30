@@ -1,4 +1,5 @@
 import os
+import json
 import numpy as np
 import pandas as pd
 
@@ -24,9 +25,14 @@ def read_split_image_ids(split):
     return read_split_image_ids_and_paths(split)[0]
 
 
-def read_image_ids(file):
+def read_image_ids(file, non_redundant=False):
     with open(file, 'r') as f:
-        return [int(line) for line in f]
+        image_ids = [int(line) for line in f]
+
+    if non_redundant:
+        return list(set(image_ids))
+    else:
+        return image_ids
 
 
 def read_image_metadata(file):
@@ -162,11 +168,47 @@ class ObjectFeaturesDataset(FeaturesDataset):
                torch.as_tensor(np.c_[boxes, areas])
 
 
+class CaptionsDataset(FairseqDataset):
+    """Captions dataset used for self-critical sequence training (SCST) only.
+    """
+    def __init__(self, captions_file, image_ids):
+        self.image_ids = image_ids
+        self.num_objects = np.zeros(len(image_ids), dtype=np.int)
+
+        with open(captions_file) as f:
+            self.captions = json.load(f)
+
+        for i, image_id in enumerate(image_ids):
+            captions = self.captions[str(image_id)]
+            caption_sizes = [len(caption.split(' ')) for caption in captions]
+            self.num_objects[i] = np.max(caption_sizes)
+
+    def __getitem__(self, index):
+        return self.captions[str(self.image_ids[index])]
+
+    def __len__(self):
+        return len(self.image_ids)
+
+    def num_tokens(self, index):
+        return self.num_objects[index]
+
+    def size(self, index):
+        return self.num_objects[index]
+
+    @property
+    def sizes(self):
+        return self.num_objects
+
+    def collater(self, samples):
+        return samples
+
+
 class ImageCaptionDataset(FairseqDataset):
-    def __init__(self, img_ds, cap_ds, cap_dict, shuffle=False):
+    def __init__(self, img_ds, cap_ds, cap_dict, scst=False, shuffle=False):
         self.img_ds = img_ds
         self.cap_ds = cap_ds
         self.cap_dict = cap_dict
+        self.scst = scst
         self.shuffle = shuffle
 
     def __getitem__(self, index):
@@ -181,7 +223,7 @@ class ImageCaptionDataset(FairseqDataset):
         }
 
     def __len__(self):
-        return len(self.cap_ds)
+        return len(self.img_ds)
 
     def num_tokens(self, index):
         return self.size(index)[1]
@@ -234,8 +276,19 @@ class ImageCaptionDataset(FairseqDataset):
         source_feature_batch, source_location_batch = \
             self.img_ds.collater(list(zip(source_feature_samples, source_location_samples)))
 
-        target_batch = data_utils.collate_tokens(target_samples, pad_idx=self.cap_dict.pad(), eos_idx=self.cap_dict.eos(), move_eos_to_beginning=False)
-        rotate_batch = data_utils.collate_tokens(target_samples, pad_idx=self.cap_dict.pad(), eos_idx=self.cap_dict.eos(), move_eos_to_beginning=True)
+        # TODO: switch depending on SCST or CE training
+        if self.scst:
+            target_batch = target_samples
+            rotate_batch = None
+        else:
+            target_batch = data_utils.collate_tokens(target_samples,
+                                                     pad_idx=self.cap_dict.pad(),
+                                                     eos_idx=self.cap_dict.eos(),
+                                                     move_eos_to_beginning=False)
+            rotate_batch = data_utils.collate_tokens(target_samples,
+                                                     pad_idx=self.cap_dict.pad(),
+                                                     eos_idx=self.cap_dict.eos(),
+                                                     move_eos_to_beginning=True)
 
         return {
             'id': indices,

@@ -1,22 +1,31 @@
 # Image Captioning Transformer
 
 This projects extends [pytorch/fairseq](https://github.com/pytorch/fairseq) with 
-[Transformer](https://arxiv.org/abs/1706.03762)\-based image captioning models. It is still in an early stage, only 
-baseline models are available at the moment. These are based on ideas from the following papers:
+[Transformer](https://arxiv.org/abs/1706.03762)\-based image captioning models. It is still **work in progress** and 
+inspired by the following papers:
 
-1. Jun Yu, Jing Li, Zhou Yu, and Qingming Huang. [Multimodal transformer with multi-view visual
-  representation for image captioning](https://arxiv.org/abs/1905.07841). arXiv preprint arXiv:1905.07841, 2019.
-  
-2. X. Zhu, L. Li, L. Jing, H. Peng, X. Niu. [Captioning Transformer with Stacked Attention Modules](https://www.mdpi.com/2076-3417/8/5/739). 
-  Appl. Sci. 2018, 8, 739
+<table>
+  <tr>
+    <td valign="top">[1]</td>
+    <td>Steven J. Rennie, Etienne Marcheret, Youssef Mroueh, Jarret Ross, Vaibhava Goel. <a href="https://arxiv.org/abs/1612.00563">Self-critical Sequence Training for Image Captioning</a>. In <i>Computer Vision and Pattern Recognition</i>, pages 1179–1195, 2017.</td>
+  </tr>
+  <tr>
+    <td valign="top">[2]</td>
+    <td>Peter Anderson, Xiaodong He, Chris Buehler, Damien Teney, Mark Johnson, Stephen Gould, Lei Zhang. <a href="https://arxiv.org/abs/1707.07998">Bottom-up and top-down attention for image captioning and visual question answering</a>. In <i>Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition</i>, pages 6077–6086, 2018.</td>
+  </tr>
+  <tr>
+    <td valign="top">[3]</td>
+    <td>Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Łukasz Kaiser, and Illia Polosukhin. <a href="https://arxiv.org/abs/1612.00563">Attention is all you need</a>. In <i>Advances in neural information processing systems</i>, pages 5998–6008, 2017.</td>
+  </tr>
+  <tr>
+    <td valign="top">[4]</td>
+    <td> Marcella Cornia, Matteo Stefanini, Lorenzo Baraldi, Rita Cucchiara. <a href="https://arxiv.org/abs/1912.08226">M2: Meshed-memory transformer for image captioning</a>. <i>arXiv preprint</i> arXiv:1912.08226, 2019.</td>
+  </tr>
+</table>
 
-3. P. Anderson, X. He, C. Buehler, D. Teney, M. Johnson, S. Gould, and L. Zhang. [Bottom-up and top-down
-  attention for image captioning and visual question answering](https://arxiv.org/abs/1707.07998). 
-  In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition, pages 6077–6086, 2018.
-
-See also section [Training](#training) for pre-trained models and their performance. Over time, more and more 
-details from these and other papers will be implemented to further push model performance. Instead of reproducing 
-the results of a single paper, main goal of this project is to combine selected approaches from several papers.
+Only baseline models are available at the moment, incl. [pre-trained models](#pre-trained-baseline-models). Their 
+[architecture](#baseline-architecture) is based on a vanilla Transformer. More specialized architectures e.g. as
+described in \[4\] are coming soon.
 
 ## Baseline architecture
 
@@ -30,7 +39,7 @@ layer projects visual features into the usually lower-dimensional representation
 
 The *simplistic baseline architecture* doesn't use a Transformer encoder and projected visual features are directly 
 processed by the Transformer decoder. In both architectures, visual features from images can be either extracted  with 
-a Faster R-CNN model as described in \[3\] or from fixed grid tiles (8x8) using an Inception V3 model.   
+a Faster R-CNN model as described in \[2\] or from fixed grid tiles (8x8) using an Inception V3 model.   
 
 ![features](docs/features.jpg)
 
@@ -51,7 +60,11 @@ The following extensions to the [fairseq command line tools](https://fairseq.rea
   Additionally use `--max-source-positions 64` when using this option. 
 - `--feature-spatial-encoding`. Learn spatial (2D-positional) encoding of bounding boxes or grid tiles. Disabled by default. 
   Positional encodings are learned from bounding box or grid tile coordinates and their size.
-  
+- `--criterion self_critical_sequence_training`. Enables self-critical sequence training (SCST) \[1\] with modifications 
+  described in \[4\]. The beam size during SCST can be configured with `--scst-beam` (default is 5) and the beam 
+  search length penalty with `--scst-penalty` (default is 1.0). Please note that SCST uses a custom sequence generator
+  so that back-propagation through beam search is possible.
+
 ## Setup
 
 ### Environment
@@ -61,10 +74,37 @@ The following extensions to the [fairseq command line tools](https://fairseq.rea
 - Create a conda environment with `conda env create -f environment.yml`.
 - Activate the conda environment with `conda activate fairseq-image-captioning`.
 
+### Evaluation tools 
+
+For model evaluation and self-critical sequence training a [Python 3 Fork](https://github.com/flauted/coco-caption) of 
+the [COCO Caption Evaluation](https://github.com/tylin/coco-caption) library is used. This library is included
+as a [Git Submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules) in the path `external/coco-caption`. 
+Download the submodule with the following commands:
+
+```
+git submodule init
+git submodule update
+``` 
+
+Furthermore, the COCO Caption Evaluation library uses the [Stanford CoreNLP 3.6.0](https://stanfordnlp.github.io/CoreNLP/index.html) 
+toolset which must be downloaded separately. It is important to change into the submodule's root folder before executing 
+the script to download the required files:
+
+```
+cd external/coco-caption
+./get_stanford_models.sh
+```
+
+Finally, update `PYTHONPATH` to include the evaluation tools.
+
+```
+export PYTHONPATH=./external/coco-caption
+```
+
 ### Dataset
 
-Models are currently trained with the MS-COCO dataset. To setup the dataset for training, create an `ms-coco` directory 
-in the project's root directory, download MS-COCO 2014
+Models are trained with the MS-COCO dataset. To setup the dataset for training, create an `ms-coco` directory in the 
+project's root directory, download MS-COCO 2014
 
 - [training images](http://images.cocodataset.org/zips/train2014.zip) (13 GB)
 - [validation images](http://images.cocodataset.org/zips/val2014.zip) (6 GB)
@@ -82,12 +122,12 @@ ms-coco
 
 MS-COCO images are needed when training with the `--features grid` command line option. Image features are then extracted
 from a fixed 8 x 8 grid on the image. When using the `--features obj` command line option image features are extracted 
-from detected objects as described in \[3\].
+from detected objects as described in \[2\].
  
 Pre-computed features of detected objects (10-100 per image) are available in [this repository](https://github.com/peteanderson80/bottom-up-attention). 
-You can also use [this link](https://imagecaption.blob.core.windows.net/imagecaption/trainval.zip) for downloading them 
+You can also use [this link](https://imagecaption.blob.core.windows.net/imagecaption/trainval.zip) to download them 
 directly (22 GB). After downloading, extract the `trainval.zip` file, rename the `trainval` directory to `features` and 
-move it to the `ms-coco` directory. The `ms-coco/features` directory should contain 4 `.tsv` files.
+move it to the `ms-coco` directory. The `ms-coco/features` directory should contain 4 `.tsv` files:
 
 ```
 ms-coco
@@ -130,12 +170,17 @@ Converts pre-computed object features into a format required for model training.
 
 ## Training
 
-A default baseline model can be trained with the following command. **Please note that this is just an example, hyper-
-parameters are not tuned yet**. 
+Captioning models are first trained with a cross-entropy loss and then fine-tuned with self-critical sequence training
+(SCST) \[1\]. SCST directly optimizes the CIDEr metric.
+
+### Cross-entropy loss
+
+For training a default baseline model with a cross-entropy loss use the following command. **Please note that this 
+is just an example, hyper-parameters are not tuned yet**. 
 
 ```
 python -m fairseq_cli.train \
-  --save-dir .checkpoints
+  --save-dir .checkpoints \
   --user-dir task \
   --task captioning \
   --arch default-captioning-arch \
@@ -161,54 +206,72 @@ python -m fairseq_cli.train \
   --num-workers 2
 ```
 
-Checkpoints are written to the `.checkpoints` directory.
+### Self-critical sequence training
 
-### Pre-trained models
+SCST is still experimental. A chosen baseline checkpoint e.g. `.checkpoints/checkpoint20.pt` can be fine-tuned via SCST 
+with the following command. **Again this is just an example, hyper-parameters are not tuned yet**.  
 
-Checkpoints 18-21 from a training run with these settings on two NVIDIA GTX 1080 cards (8GB memory each) are available 
-for download.
+```
+python -m fairseq_cli.train \
+  --restore-file .checkpoints/checkpoint20.pt \
+  --save-dir .checkpoints-scst \
+  --user-dir task \
+  --task captioning \
+  --arch default-captioning-arch \
+  --encoder-layers 3 \
+  --decoder-layers 6 \
+  --features obj \
+  --feature-spatial-encoding \
+  --optimizer adam \
+  --adam-betas "(0.9,0.999)" \
+  --reset-optimizer \
+  --lr 5e-6 \
+  --weight-decay 0.0001 \
+  --criterion self_critical_sequence_training \
+  --dropout 0.3 \
+  --max-epoch 24 \
+  --max-sentences 5 \
+  --max-source-positions 100 \
+  --max-target-positions 50 \
+  --encoder-embed-dim 512 \
+  --tokenizer moses \
+  --bpe subword_nmt \
+  --bpe-codes output/codes.txt \
+  --ddp-backend=no_c10d \
+  --scst-beam 5 \
+  --scst-penalty 1.0 \
+  --scst-validation-set-size 0 \
+  --num-workers 2
+```
 
-- [checkpoint 18](https://drive.google.com/open?id=1cudwknaX3CjQtQsi6SRTVG3FLNE68tmA) 
-- [checkpoint 19](https://drive.google.com/open?id=1tttQwigvtT49tcpW8aZVNlrvKZqmKjcL) 
-- [checkpoint 20](https://drive.google.com/open?id=1UEGuVg02KY4SiWLX37ZAj3Nc8jVWnqnu) 
-- [checkpoint 21](https://drive.google.com/open?id=18Sax2pznZgFeNm_OtvCm42kalOCPhZgD) 
+In this example, validation is skipped (`scst-validation-set-size 0`) and the result after 4 epochs is used. Saving
+of best checkpoints during training based on validation CIDEr metrics is not implemented yet. At the moment, checkpoints 
+are saved after each epoch and must be evaluated separately as described in section [Evaluation](#evaluation).
 
-The best single model is checkpoint 20. Evaluation results for this model and an ensemble of all four checkpoints are 
-shown in the following table. These are compared to models in \[2\] and \[3\], **trained with cross-entropy loss** (not
-fine-tuned with reinforcement learning yet, as described [here](https://arxiv.org/abs/1612.00563)) and evaluated on the 
-Karpathy test split.
+Option `--max-epoch` should be set to the epoch number of the chosen baseline checkpoint incremented by 4. For example, 
+with checkpoint `.checkpoints/checkpoint20.pt` set `--max-epoch` to `24`. Option `--ddp-backend=no_c10d` should be used 
+when training on multiple GPUs.
 
-| Model | BLEU-1<sup>*</sup> | BLEU-4<sup>*</sup> | METEOR | ROUGE-L | CIDEr | SPICE |
-| :--- | :----: | :----: | :----: | :-----: | :---: | :----: |
-| \[2\] (single model) | 73.0 | 33.3 |   | 54.8 | 108.1 |  |
-| \[3\] (single model) | **77.2** | **36.2** | 27.0 | 56.4 | 113.5 | 20.3 |
-| Baseline (checkpoint 20)  | 74.8 | 34.8 | 28.0 | 56.2 | 112.9 | **21.1** |
-| Baseline (checkpoints 18-21)  | 74.7 | 35.2 | **28.3** | **56.5** | **114.8** | **21.1** |
+### Pre-trained baseline models
 
-<sup>*</sup> It must be investigated if there's an [inconsistency in reported BLEU scores](https://arxiv.org/abs/1804.08771). 
+Checkpoint 20 from training with cross-entropy loss and checkpoint 24 from self-critical sequence training are available
+for download. 
+
+- [checkpoint 20](https://drive.google.com/open?id=1UEGuVg02KY4SiWLX37ZAj3Nc8jVWnqnu)
+- [checkpoint 24](https://drive.google.com/open?id=1zwAGbVtT2W4Sc3gHNyL1ZsfhIwdAn7QM) 
+
+They have been trained on two NVIDIA GTX 1080 cards (8GB memory each). Evaluation results of these checkpoints are shown 
+in the following table and compared to single-model evaluation results in \[2\], all evaluated on the Karpathy test split.
+
+| Model | Criterion | Beam size | BLEU-1<sup>*</sup> | BLEU-4<sup>*</sup> | METEOR | ROUGE-L | CIDEr | SPICE |
+| :--- | :--- | :----: | :----: | :----: | :-----: | :---: | :----: | :----: |
+| Checkpoint 20 | Cross-entropy | 3 | 74.8 | 34.8 | 28.0 | 56.2 | 112.9 | 21.1 |
+| Checkpoint 24 | SCST | 5 | 79.3 | **39.1** | **28.1** | **58.3** | **125.0** | **22.0** |
+| Up-Down \[2\] | SCST | 5 | **79.8** | 36.3 | 27.7 | 56.9 | 120.1 | 21.4 |
+
+<sup>*</sup> It must be investigated if there's an [inconsistency in reported BLEU scores](https://arxiv.org/abs/1804.08771).
 
 ## Evaluation
-
-### Setup
-
-Evaluation is performed using a [Python 3 Fork](https://github.com/flauted/coco-caption) of the
-[COCO Caption Evaluation](https://github.com/tylin/coco-caption) library. This library is included
-as a [Git Submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules) in the path `external/coco-caption`. Download 
-the submodule with the following commands:
-
-```
-git submodule init
-git submodule update
-``` 
-
-Furthermore, the COCO Caption Evaluation library uses the [Stanford CoreNLP 3.6.0](https://stanfordnlp.github.io/CoreNLP/index.html) 
-toolset which must be downloaded prior to the first execution of the scoring script. It is important to change into the 
-submodules root folder before executing the script to download the required files:
-
-```
-cd external/coco-caption
-./get_stanford_models.sh
-```
 
 ### Generate captions 
 
@@ -216,26 +279,24 @@ Captions can be generated for images in the Karpathy test split with the followi
 
 ```
 python generate.py \
---user-dir task \
---features obj \
---tokenizer moses \
---bpe subword_nmt \
---bpe-codes output/codes.txt \
---beam 3 \
---split test \
---path .checkpoints/checkpoint_best.pt \
---input output/test-ids.txt \
---output output/test-predictions.json
+  --user-dir task \
+  --features obj \
+  --tokenizer moses \
+  --bpe subword_nmt \
+  --bpe-codes output/codes.txt \
+  --beam 5 \
+  --split test \
+  --path .checkpoints-scst/checkpoint24.pt \
+  --input output/test-ids.txt \
+  --output output/test-predictions.json
 ```
 
-This example uses the best checkpoint from a training run (`--path .checkpoints/checkpoint_best.pt`). To generate 
-captions with a pre-trained baseline model download checkpoint 20 to the project's root directory and use
-`--path checkpoint20.pt` instead. To generate captions with the full ensemble additionally download checkpoints
-18, 19 and 21 and use `--path checkpoint18.pt:checkpoint19.pt:checkpoint20.pt:checkpoint21.pt`.
+This example uses checkpoint 24 from the SCST training run (`--path .checkpoints-scst/checkpoint24.pt`) and stores the 
+generated captions in `output/test-predictions.json`.
 
 ### Calculate metrics  
 
-Metrics can be calculated with the `score.sh` script. This script uses the specified reference-captions as the
+Metrics can be calculated with the `score.sh` script. This script uses the specified reference captions as the
 ground truth and evaluates the model based on the generated captions provided as a JSON file (created with the 
 `generate.py` script). The following example calculates metrics for captions contained in 
 `output/test-predictions.json`.
@@ -248,27 +309,28 @@ ground truth and evaluates the model based on the generated captions provided as
 
 Note `output/test-predictions.json` contains captions generated for the Karpathy test split which is a subset of the
 images contained in the official MS-COCO validation set `external/coco-caption/annotations/captions_val2014.json`. For 
-captions generated with the full baseline ensemble this should produce an output like
+captions generated with the provided [checkpoint 24](https://drive.google.com/open?id=1zwAGbVtT2W4Sc3gHNyL1ZsfhIwdAn7QM) 
+this should produce an output like
 
 ```
 ...
 
 Scores:
 =======
-Bleu_1: 0.747
-Bleu_2: 0.587
-Bleu_3: 0.454
-Bleu_4: 0.352
-METEOR: 0.283
-ROUGE_L: 0.565
-CIDEr: 1.148
-SPICE: 0.211
+Bleu_1: 0.793
+Bleu_2: 0.647
+Bleu_3: 0.508
+Bleu_4: 0.391
+METEOR: 0.281
+ROUGE_L: 0.583
+CIDEr: 1.250
+SPICE: 0.220
 ```
 
 ## Demo
 
-To generate captions with the baseline ensemble for some test set images contained in [demo/demo-ids.txt](demo/demo-ids.txt), 
-run the following command: 
+To generate captions with the provided [checkpoint 24](https://drive.google.com/open?id=1Rh1II17IEv0XcL8OKeKM-P_XKO4Y--uy) 
+for some test set images contained in [demo/demo-ids.txt](demo/demo-ids.txt), run the following command: 
 
 ```
 python generate.py \
@@ -277,24 +339,23 @@ python generate.py \
 --tokenizer moses \
 --bpe subword_nmt \
 --bpe-codes output/codes.txt \
---beam 3 \
+--beam 5 \
 --split test \
---path checkpoint18.pt:checkpoint19.pt:checkpoint20.pt:checkpoint21.pt \
+--path checkpoint24.pt \
 --input demo/demo-ids.txt \
 --output demo/demo-predictions.json
 ```
 
-Alternatively use `--path checkpoint20.pt` to use a single baseline checkpoint instead of the ensemble. When using the
-ensemble you should see an output like
+You should see an output like
 
 ```
 Predictions:
 ============
-37729: a black and white cat sitting next to a vase of flowers.
-571746: a red and white train traveling down a snow covered slope.
-504005: a wok filled with broccoli and other vegetables.
-547502: four dogs are playing with a frisbee in the grass.
-10526: a man riding a skateboard down the side of a ramp.
+37729: a cat sitting on a table next to a vase of flowers
+571746: a red train traveling down a snow covered slope.
+504005: a wok with broccoli and carrots in it.
+547502: four dogs playing with a frisbee in a field.
+10526: a man riding a skateboard down a rail.
 ```
 
 Notebook [viewer.ipynb](viewer.ipynb) displays generated captions together with their images.

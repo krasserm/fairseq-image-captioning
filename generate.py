@@ -1,4 +1,5 @@
 import argparse
+import os
 import torch
 import pandas as pd
 
@@ -11,10 +12,11 @@ import data
 
 def main(script_args, model_args):
     split = script_args.split
-    predictions = predict(image_id_path=f'{model_args.captions_dir}/{split}-ids.txt',
-                          grid_features_path=f'{model_args.features_dir}/{split}-features-grid',
-                          obj_features_path=f'{model_args.features_dir}/{split}-features-obj',
-                          obj_features_meta_path=f'{model_args.features_dir}/{split}-features-obj/metadata.csv',
+    os.path.join(model_args.features_dir, )
+    predictions = predict(image_id_path=os.path.join(model_args.captions_dir, f'{split}-ids.txt'),
+                          grid_features_path=os.path.join(model_args.features_dir, f'{split}-features-grid'),
+                          obj_features_path=os.path.join(model_args.features_dir, f'{split}-features-obj'),
+                          obj_features_meta_path=os.path.join(model_args.features_dir, f'{split}-features-obj', 'metadata.csv'),
                           model_args=model_args)
 
     if not script_args.no_console_output:
@@ -57,7 +59,7 @@ def predict(image_id_path: str,
             x = tokenizer.decode(x)
         return x
 
-    sample_ids = read_sample_ids(model_args.input)
+    sample_ids = data.read_image_ids(model_args.input, non_redundant=True)
     image_ids = data.read_image_ids(image_id_path)
 
     assert_sample_id_validity(sample_ids, image_ids)
@@ -99,12 +101,6 @@ def predict(image_id_path: str,
         'image_id': prediction_ids,
         'caption': prediction_results
     })
-
-
-def read_sample_ids(sample_id_file: str):
-    with open(sample_id_file) as f:
-        sample_ids = set([int(line.rstrip('\n')) for line in f])
-    return sample_ids
 
 
 def assert_sample_id_validity(sample_ids: iter, image_ids: iter):
