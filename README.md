@@ -351,11 +351,12 @@ You should see an output like
 ```
 Predictions:
 ============
-37729: a cat sitting on a table next to a vase of flowers
-571746: a red train traveling down a snow covered slope.
-504005: a wok with broccoli and carrots in it.
-547502: four dogs playing with a frisbee in a field.
-10526: a man riding a skateboard down a rail.
+388677: a police officer riding a motorcycle on a street.
+104421: a dog chasing a frisbee in a field.
+268363: a baby sleeping next to a teddy bear.
+489611: a young boy holding a video game controller.
+147915: a stop sign with graffiti on it.
+188795: a building with a clock tower at night.
 ```
 
 Notebook [viewer.ipynb](viewer.ipynb) displays generated captions together with their images.
