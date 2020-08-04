@@ -2,6 +2,7 @@
 
 export PYTHONPATH=.
 
-python preprocess/preprocess_features.py --features-dir $1 --split train
-python preprocess/preprocess_features.py --features-dir $1 --split valid
-python preprocess/preprocess_features.py --features-dir $1 --split test
+for split in 'train' 'valid' 'test'
+do
+  python preprocess/preprocess_features.py --features-dir $1 --split $split
+done
