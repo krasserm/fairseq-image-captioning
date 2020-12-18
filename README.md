@@ -257,8 +257,8 @@ when training on multiple GPUs.
 Checkpoint 20 from training with cross-entropy loss and checkpoint 24 from self-critical sequence training are available
 for download. 
 
-- [checkpoint 20](https://drive.google.com/open?id=1UEGuVg02KY4SiWLX37ZAj3Nc8jVWnqnu)
-- [checkpoint 24](https://drive.google.com/open?id=1zwAGbVtT2W4Sc3gHNyL1ZsfhIwdAn7QM) 
+- [checkpoint 20](http://martin-krasser.de/image-captioning/checkpoint20.pt)
+- [checkpoint 24](http://martin-krasser.de/image-captioning/checkpoint24.pt) 
 
 They have been trained on two NVIDIA GTX 1080 cards (8GB memory each). Evaluation results of these checkpoints are shown 
 in the following table and compared to single-model evaluation results in \[2\], all evaluated on the Karpathy test split.
@@ -309,7 +309,7 @@ ground truth and evaluates the model based on the generated captions provided as
 
 Note `output/test-predictions.json` contains captions generated for the Karpathy test split which is a subset of the
 images contained in the official MS-COCO validation set `external/coco-caption/annotations/captions_val2014.json`. For 
-captions generated with the provided [checkpoint 24](https://drive.google.com/open?id=1zwAGbVtT2W4Sc3gHNyL1ZsfhIwdAn7QM) 
+captions generated with the provided [checkpoint 24](http://martin-krasser.de/image-captioning/checkpoint24.pt) 
 this should produce an output like
 
 ```
@@ -329,7 +329,7 @@ SPICE: 0.220
 
 ## Demo
 
-To generate captions with the provided [checkpoint 24](https://drive.google.com/open?id=1Rh1II17IEv0XcL8OKeKM-P_XKO4Y--uy) 
+To generate captions with the provided [checkpoint 24](http://martin-krasser.de/image-captioning/checkpoint24.pt) 
 for some test set images contained in [demo/demo-ids.txt](demo/demo-ids.txt), run the following command: 
 
 ```
